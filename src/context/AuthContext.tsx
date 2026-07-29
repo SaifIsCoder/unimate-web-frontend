@@ -9,6 +9,7 @@ import {
   setAuthFailureHandler,
 } from "@/services/apiClient";
 import { loginUser, logoutUser, validateSession } from "@/services/authService";
+import { hasRole, homePathForRole, writeSessionHint } from "@/lib/session";
 
 type AuthContextType = {
   user: AuthUser | null;
@@ -17,15 +18,15 @@ type AuthContextType = {
   login: (email: string, password: string) => Promise<AuthUser>;
   logout: () => Promise<void>;
   clearAuthError: () => void;
+  /** True when the signed-in user satisfies every role in `allowed`. */
+  can: (allowed: readonly string[]) => boolean;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const homePathForRole = (role: string | undefined): string => {
-  if (role === "teacher") return "/teacher";
-  if (role === "admin" || role === "super_admin") return "/admin";
-  return "/signin";
-};
+// Re-exported so existing imports keep working; the definition now lives in
+// lib/session.ts because middleware needs it too and cannot import client code.
+export { homePathForRole };
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -51,6 +52,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (cachedUser && token) {
         setUser(cachedUser);
+        // Re-assert the middleware hint on every boot. It expires independently
+        // of the tokens, so a returning user whose cookie lapsed would otherwise
+        // be bounced to sign-in by the edge despite holding a valid session.
+        writeSessionHint(cachedUser.role);
+
         // Fire-and-forget session validation; a failure triggers handleAuthFailure
         // via the apiClient's 401 -> refresh -> logout pipeline.
         void validateSession();
@@ -84,11 +90,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const clearAuthError = useCallback(() => setAuthError(null), []);
 
-  return (
-    <AuthContext.Provider value={{ user, loading, authError, login, logout, clearAuthError }}>
-      {children}
-    </AuthContext.Provider>
+  // Mirrors the API's role hierarchy, so a `super_admin` satisfies an `admin`
+  // gate without every call site having to list both.
+  const can = useCallback(
+    (allowed: readonly string[]) => hasRole(user?.role, allowed),
+    [user],
   );
+
+  const value = React.useMemo(
+    () => ({ user, loading, authError, login, logout, clearAuthError, can }),
+    [user, loading, authError, login, logout, clearAuthError, can],
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export const useAuth = () => {

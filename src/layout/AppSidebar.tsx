@@ -5,68 +5,46 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useSidebar } from "../context/SidebarContext";
 import { useAuth } from "../context/AuthContext";
-import {
-  BoxCubeIcon,
-  CalenderIcon,
-  ChevronDownIcon,
-  GridIcon,
-  GroupIcon,
-  HorizontaLDots,
-  ListIcon,
-  PaperPlaneIcon,
-  UserCircleIcon,
-} from "../icons/index";
+import { ChevronDownIcon, HorizontaLDots } from "../icons/index";
 import SidebarWidget from "./SidebarWidget";
+import { navigationForRole, type NavItem } from "@/lib/navigation";
 
-type NavItem = {
-  name: string;
-  icon: React.ReactNode;
-  path?: string;
-  subItems?: { name: string; path: string; pro?: boolean; new?: boolean }[];
-};
-
-// Only real, working routes are linked here. As each module from
-// DASHBOARD_PLAN.md gets its own page, add it as a real entry —
-// avoid placeholder links that don't go anywhere distinct.
-const ADMIN_NAV_ITEMS: NavItem[] = [
-  { icon: <GridIcon />, name: "Dashboard", path: "/admin" },
-  { icon: <GroupIcon />, name: "User Provisioning", path: "/admin/users" },
-  {
-    icon: <BoxCubeIcon />,
-    name: "Academic Setup",
-    subItems: [
-      { name: "Courses", path: "/admin/courses" },
-      { name: "Offerings", path: "/admin/offerings" },
-    ],
-  },
-  { icon: <ListIcon />, name: "Enrollments", path: "/admin/enrollments" },
-  { icon: <PaperPlaneIcon />, name: "Announcements", path: "/admin/announcements" },
-  { icon: <CalenderIcon />, name: "Events", path: "/admin/events" },
-];
-
-const TEACHER_NAV_ITEMS: NavItem[] = [
-  { icon: <GridIcon />, name: "My Classes", path: "/teacher" },
-];
-
-const othersItems: NavItem[] = [
-  {
-    icon: <UserCircleIcon />,
-    name: "User Profile",
-    path: "/profile",
-  },
-];
+/** Stable submenu key for a section, including the unlabelled first group. */
+const sectionKey = (title: string | null) => title ?? "primary";
 
 const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
   const { user } = useAuth();
   const pathname = usePathname();
 
-  const navItems = user?.role === "teacher" ? TEACHER_NAV_ITEMS : ADMIN_NAV_ITEMS;
+  // Nav is derived from the user's role in one place (lib/navigation.tsx), so
+  // an unauthorised link can never render for the wrong actor.
+  const sections = React.useMemo(
+    () => navigationForRole(user?.role),
+    [user?.role],
+  );
 
-  const renderMenuItems = (
-    navItems: NavItem[],
-    menuType: "main" | "others"
-  ) => (
+  /**
+   * The deepest configured path that prefixes the current URL.
+   *
+   * Exact matching alone would leave "My Classes" inactive on
+   * /teacher/classes/<id>; naive prefix matching would instead light up
+   * "Overview" (/admin) on every /admin/* page. Longest-match resolves both.
+   */
+  const activePath = React.useMemo(() => {
+    const paths = sections.flatMap((section) =>
+      section.items.flatMap((item) => [
+        ...(item.path ? [item.path] : []),
+        ...(item.subItems?.map((sub) => sub.path) ?? []),
+      ]),
+    );
+
+    return paths
+      .filter((path) => pathname === path || pathname.startsWith(`${path}/`))
+      .sort((a, b) => b.length - a.length)[0];
+  }, [sections, pathname]);
+
+  const renderMenuItems = (navItems: NavItem[], menuType: string) => (
     <ul className="flex flex-col gap-4">
       {navItems.map((nav, index) => (
         <li key={nav.name}>
@@ -154,30 +132,6 @@ const AppSidebar: React.FC = () => {
                       }`}
                     >
                       {subItem.name}
-                      <span className="flex items-center gap-1 ml-auto">
-                        {subItem.new && (
-                          <span
-                            className={`ml-auto ${
-                              isActive(subItem.path)
-                                ? "menu-dropdown-badge-active"
-                                : "menu-dropdown-badge-inactive"
-                            } menu-dropdown-badge `}
-                          >
-                            new
-                          </span>
-                        )}
-                        {subItem.pro && (
-                          <span
-                            className={`ml-auto ${
-                              isActive(subItem.path)
-                                ? "menu-dropdown-badge-active"
-                                : "menu-dropdown-badge-inactive"
-                            } menu-dropdown-badge `}
-                          >
-                            pro
-                          </span>
-                        )}
-                      </span>
                     </Link>
                   </li>
                 ))}
@@ -189,21 +143,19 @@ const AppSidebar: React.FC = () => {
     </ul>
   );
 
-  type OpenSubmenu = { type: "main" | "others"; index: number } | null;
+  type OpenSubmenu = { type: string; index: number } | null;
 
   // Which submenu the current route lives in, if any. Cheap enough to derive
   // every render; the compiler handles memoization.
   const submenuForPath: OpenSubmenu = (() => {
-    const groups: { type: "main" | "others"; items: NavItem[] }[] = [
-      { type: "main", items: navItems },
-      { type: "others", items: othersItems },
-    ];
-
-    for (const group of groups) {
-      const index = group.items.findIndex((nav) =>
-        nav.subItems?.some((subItem) => subItem.path === pathname)
+    for (const section of sections) {
+      const index = section.items.findIndex((nav) =>
+        nav.subItems?.some(
+          (subItem) =>
+            pathname === subItem.path || pathname.startsWith(`${subItem.path}/`),
+        ),
       );
-      if (index !== -1) return { type: group.type, index };
+      if (index !== -1) return { type: sectionKey(section.title), index };
     }
 
     return null;
@@ -216,8 +168,7 @@ const AppSidebar: React.FC = () => {
   );
   const subMenuRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  // const isActive = (path: string) => path === pathname;
-   const isActive = useCallback((path: string) => path === pathname, [pathname]);
+  const isActive = useCallback((path: string) => path === activePath, [activePath]);
 
   // Navigating away discards any manual open/close the user did. Adjusting
   // state during render (rather than in an effect) is React's recommended
@@ -241,7 +192,7 @@ const AppSidebar: React.FC = () => {
     }
   }, [openSubmenu]);
 
-  const handleSubmenuToggle = (index: number, menuType: "main" | "others") => {
+  const handleSubmenuToggle = (index: number, menuType: string) => {
     setOpenSubmenu((prevOpenSubmenu) => {
       if (
         prevOpenSubmenu &&
@@ -305,39 +256,26 @@ const AppSidebar: React.FC = () => {
       <div className="flex flex-col overflow-y-auto duration-300 ease-linear no-scrollbar">
         <nav className="mb-6">
           <div className="flex flex-col gap-4">
-            <div>
-              <h2
-                className={`mb-4 text-xs uppercase flex leading-[20px] text-gray-400 ${
-                  !isExpanded && !isHovered
-                    ? "lg:justify-center"
-                    : "justify-start"
-                }`}
-              >
-                {isExpanded || isHovered || isMobileOpen ? (
-                  "Menu"
-                ) : (
-                  <HorizontaLDots />
-                )}
-              </h2>
-              {renderMenuItems(navItems, "main")}
-            </div>
-
-            <div className="">
-              <h2
-                className={`mb-4 text-xs uppercase flex leading-[20px] text-gray-400 ${
-                  !isExpanded && !isHovered
-                    ? "lg:justify-center"
-                    : "justify-start"
-                }`}
-              >
-                {isExpanded || isHovered || isMobileOpen ? (
-                  "Others"
-                ) : (
-                  <HorizontaLDots />
-                )}
-              </h2>
-              {renderMenuItems(othersItems, "others")}
-            </div>
+            {sections.map((section) => (
+              <div key={sectionKey(section.title)}>
+                <h2
+                  className={`mb-4 flex text-xs uppercase leading-5 text-gray-400 ${
+                    !isExpanded && !isHovered
+                      ? "lg:justify-center"
+                      : "justify-start"
+                  }`}
+                >
+                  {isExpanded || isHovered || isMobileOpen ? (
+                    // The first group is intentionally unlabelled; a blank
+                    // heading keeps its items aligned with the rest.
+                    (section.title ?? " ")
+                  ) : (
+                    <HorizontaLDots />
+                  )}
+                </h2>
+                {renderMenuItems(section.items, sectionKey(section.title))}
+              </div>
+            ))}
           </div>
         </nav>
         {isExpanded || isHovered || isMobileOpen ? <SidebarWidget /> : null}

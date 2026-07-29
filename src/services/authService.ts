@@ -1,4 +1,5 @@
 import API_ENDPOINTS from "@/config/api";
+import { isDashboardRole } from "@/lib/session";
 import {
   apiRequest,
   AuthUser,
@@ -13,8 +14,6 @@ type LoginResponseData = {
   role: string;
   user: AuthUser;
 };
-
-const DASHBOARD_ROLES = ["admin", "super_admin", "teacher"];
 
 export const loginUser = async (email: string, password: string): Promise<AuthUser> => {
   const normalizedEmail = email.trim().toLowerCase();
@@ -33,13 +32,17 @@ export const loginUser = async (email: string, password: string): Promise<AuthUs
     throw new Error("Login failed: unexpected server response.");
   }
 
-  if (!DASHBOARD_ROLES.includes(data.user.role)) {
+  // Students authenticate successfully against the API but have no dashboard
+  // surface — reject before persisting anything so no session is created.
+  if (!isDashboardRole(data.user.role)) {
     throw new Error(
-      "This account does not have access to the admin dashboard. Please use the mobile app instead.",
+      "This account does not have access to the dashboard. Students should use the UniMate mobile app.",
     );
   }
 
-  setTokens(data.accessToken, data.refreshToken);
+  // The role is passed through so the middleware session hint is written in the
+  // same step as the tokens.
+  setTokens(data.accessToken, data.refreshToken, data.user.role);
   setStoredUser(data.user);
 
   return data.user;

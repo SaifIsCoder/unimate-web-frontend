@@ -4,8 +4,10 @@ import Label from "@/components/form/Label";
 import Button from "@/components/ui/button/Button";
 import { ChevronLeftIcon, EyeCloseIcon, EyeIcon } from "@/icons";
 import { homePathForRole, useAuth } from "@/context/AuthContext";
+import { hasRole } from "@/lib/session";
+import { ruleFor } from "@/lib/routes";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import React, { useState } from "react";
 
 export default function SignInForm() {
@@ -16,6 +18,25 @@ export default function SignInForm() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const { login } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  /**
+   * Honour the `?next=` set by middleware when it intercepted a deep link, so
+   * users land where they were headed. Only same-origin relative paths the role
+   * can actually reach are accepted — an absolute URL here would be an open
+   * redirect, and a path they lack the role for would just bounce again.
+   */
+  const resolveDestination = (role: string): string => {
+    const next = searchParams.get("next");
+    if (!next || !next.startsWith("/") || next.startsWith("//")) {
+      return homePathForRole(role);
+    }
+
+    const rule = ruleFor(next);
+    if (rule && !hasRole(role, rule.roles)) return homePathForRole(role);
+
+    return next;
+  };
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -30,7 +51,7 @@ export default function SignInForm() {
 
     try {
       const user = await login(email, password);
-      router.push(homePathForRole(user.role));
+      router.replace(resolveDestination(user.role));
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Login failed.");
     } finally {
