@@ -59,28 +59,47 @@ export const homePathForRole = (role: string | undefined): string => {
 
 // ── Encoding ─────────────────────────────────────────────────────────────────
 // Base64url keeps the value cookie-safe without percent-encoding noise.
+//
+// TextEncoder/TextDecoder rather than the legacy `escape`/`unescape` pair: both
+// of those are deprecated, and they are also the classic source of mojibake on
+// non-Latin-1 input. These APIs are available identically in the browser, in
+// Node, and in the edge runtime that executes middleware — so one code path
+// serves all three.
 
-const encode = (hint: SessionHint): string => {
-  const json = JSON.stringify(hint);
-  const base64 =
-    typeof window === "undefined"
-      ? Buffer.from(json, "utf8").toString("base64")
-      : window.btoa(unescape(encodeURIComponent(json)));
-  return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const toBase64Url = (bytes: Uint8Array): string => {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 };
+
+const fromBase64Url = (value: string): Uint8Array => {
+  const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
+  // atob rejects a string whose length isn't a multiple of 4, and base64url
+  // strips the padding, so it has to be restored.
+  const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+  const binary = atob(padded);
+
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+};
+
+const encode = (hint: SessionHint): string =>
+  toBase64Url(new TextEncoder().encode(JSON.stringify(hint)));
 
 export const decodeSessionHint = (raw: string | undefined): SessionHint | null => {
   if (!raw) return null;
+
   try {
-    const base64 = raw.replace(/-/g, "+").replace(/_/g, "/");
-    const json =
-      typeof window === "undefined"
-        ? Buffer.from(base64, "base64").toString("utf8")
-        : decodeURIComponent(escape(window.atob(base64)));
+    // `fatal` makes invalid UTF-8 throw instead of silently yielding U+FFFD,
+    // so a corrupt cookie is rejected rather than parsed into nonsense.
+    const json = new TextDecoder("utf-8", { fatal: true }).decode(fromBase64Url(raw));
 
     const parsed = JSON.parse(json) as Partial<SessionHint>;
     if (typeof parsed.role !== "string" || typeof parsed.exp !== "number") return null;
-    if (parsed.exp <= Date.now()) return null;
+    if (!Number.isFinite(parsed.exp) || parsed.exp <= Date.now()) return null;
+    // A role outside the dashboard set (notably `student`) is not a session
+    // this app will honour, forged or otherwise.
     if (!isDashboardRole(parsed.role)) return null;
 
     return { role: parsed.role, exp: parsed.exp };

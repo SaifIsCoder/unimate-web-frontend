@@ -6,23 +6,19 @@ import { usePathname } from "next/navigation";
 import { useSidebar } from "../context/SidebarContext";
 import { useAuth } from "../context/AuthContext";
 import { ChevronDownIcon, HorizontaLDots } from "../icons/index";
-import SidebarWidget from "./SidebarWidget";
-import { navigationForRole, type NavItem } from "@/lib/navigation";
+import { navigationFor, type NavItem } from "@/lib/navigation";
 
 /** Stable submenu key for a section, including the unlabelled first group. */
 const sectionKey = (title: string | null) => title ?? "primary";
 
 const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
-  const { user } = useAuth();
+  const { can } = useAuth();
   const pathname = usePathname();
 
-  // Nav is derived from the user's role in one place (lib/navigation.tsx), so
-  // an unauthorised link can never render for the wrong actor.
-  const sections = React.useMemo(
-    () => navigationForRole(user?.role),
-    [user?.role],
-  );
+  // Nav is filtered through the same `can()` the rest of the app uses, so a
+  // link can never appear for a user the route guard would turn away.
+  const sections = React.useMemo(() => navigationFor(can), [can]);
 
   /**
    * The deepest configured path that prefixes the current URL.
@@ -278,7 +274,6 @@ const AppSidebar: React.FC = () => {
             ))}
           </div>
         </nav>
-        {isExpanded || isHovered || isMobileOpen ? <SidebarWidget /> : null}
       </div>
     </aside>
   );

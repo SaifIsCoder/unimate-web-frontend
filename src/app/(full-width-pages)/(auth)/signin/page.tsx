@@ -2,8 +2,10 @@ import { Suspense } from "react";
 import SignInForm from "@/components/auth/SignInForm";
 import { Metadata } from "next";
 
+// Just the page name — the root layout's `title.template` appends
+// "| UniMate Dashboard" automatically.
 export const metadata: Metadata = {
-  title: "Sign in | UniMate Dashboard",
+  title: "Sign in",
   description: "Sign in to the UniMate admin and teacher dashboard.",
 };
 

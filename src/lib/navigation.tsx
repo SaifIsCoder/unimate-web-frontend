@@ -22,6 +22,15 @@ import { hasRole } from "./session";
  * in the sidebar.
  */
 
+/**
+ * Permission predicate — satisfied by `can` from `useAuth()`.
+ *
+ * Taking the check as a parameter rather than a role string means the sidebar
+ * asks the same authority every other component asks. There is one definition
+ * of "may this user do X", so nav and page guards cannot disagree.
+ */
+export type PermissionCheck = (allowed: readonly string[]) => boolean;
+
 export type NavLink = {
   name: string;
   path: string;
@@ -102,18 +111,27 @@ const SECTIONS: NavSection[] = [
 ];
 
 /**
- * Sections visible to a role, with unauthorised items and sub-items removed.
- * Sections that end up empty are dropped so no orphan headings render.
+ * Sections the current user may see, with unauthorised items and sub-items
+ * removed. Sections left empty are dropped so no orphan headings render.
+ *
+ * @param can permission predicate, normally `can` from `useAuth()`
  */
-export const navigationForRole = (role: string | undefined): NavSection[] =>
+export const navigationFor = (can: PermissionCheck): NavSection[] =>
   SECTIONS.map((section) => ({
     title: section.title,
     items: section.items
-      .filter((item) => hasRole(role, item.roles))
+      .filter((item) => can(item.roles))
       .map((item) => ({
         ...item,
-        subItems: item.subItems?.filter((sub) => hasRole(role, sub.roles)),
+        subItems: item.subItems?.filter((sub) => can(sub.roles)),
       }))
       // An item whose sub-items were all filtered away has nothing to link to.
       .filter((item) => item.path || (item.subItems && item.subItems.length > 0)),
   })).filter((section) => section.items.length > 0);
+
+/**
+ * Role-based convenience wrapper, for callers without an auth context —
+ * tests, and any future server component that knows only the role.
+ */
+export const navigationForRole = (role: string | undefined): NavSection[] =>
+  navigationFor((allowed) => hasRole(role, allowed));
