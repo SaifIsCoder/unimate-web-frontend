@@ -1,0 +1,255 @@
+/**
+ * Shapes returned by the UniMate API. Field names intentionally mirror the
+ * backend's snake_case rows rather than being camelised, so a response can be
+ * traced straight back to its SQL without a translation layer.
+ */
+
+export type Role = "super_admin" | "admin" | "teacher" | "student";
+
+export type PageMeta = {
+  total: number;
+  page: number;
+  limit: number;
+};
+
+export type Paginated<T> = {
+  data: T[];
+  meta: PageMeta;
+};
+
+export type Department = {
+  id: number;
+  name: string;
+  code: string;
+  description: string | null;
+};
+
+export type Course = {
+  id: string;
+  code: string;
+  title: string;
+  credit_hours: number;
+  has_practical: boolean;
+  department_id: number | null;
+  department_name: string | null;
+  department_code: string | null;
+};
+
+/** Decimal columns arrive from pg as strings — never assume number here. */
+export type Offering = {
+  id: string;
+  course_id: string;
+  teacher_id: string | null;
+  semester: string;
+  section: string;
+  capacity: number;
+  mid_weight: string;
+  sessional_weight: string;
+  final_weight: string;
+  practical_weight: string;
+  course_code: string;
+  course_title: string;
+  teacher_email: string | null;
+};
+
+export type Teacher = {
+  id: string;
+  user_id: string;
+  employee_id: string;
+  email: string;
+  department_id: number | null;
+  department_name: string | null;
+};
+
+export type Student = {
+  id: string;
+  user_id: string;
+  roll_number: string;
+  batch: number;
+  email: string;
+  department_id: number | null;
+  department_name: string | null;
+};
+
+export type EnrollmentStatus = "enrolled" | "dropped";
+
+export type Enrollment = {
+  id: string;
+  student_id: string;
+  offering_id: string;
+  status: EnrollmentStatus;
+  enrolled_at: string;
+  roll_number: string;
+  student_email: string;
+  batch: number;
+  department_id: number | null;
+  department_name: string | null;
+  semester: string;
+  section: string;
+  course_code: string;
+  course_title: string;
+};
+
+export type Announcement = {
+  id: string;
+  title: string;
+  content: string;
+  author_id: string;
+  department_id: number | null;
+  semester: string | null;
+  created_at: string;
+  is_read?: boolean;
+};
+
+export type CampusEvent = {
+  id: string;
+  title: string;
+  description: string | null;
+  date: string;
+  location: string | null;
+  is_upcoming: boolean;
+};
+
+// ── Teacher portal ────────────────────────────────────────────────────────────
+
+/** An offering as returned by GET /teachers/me/offerings. */
+export type TeachingOffering = {
+  id: string;
+  course_id: string;
+  teacher_id: string;
+  semester: string;
+  section: string;
+  capacity: number;
+  course_code: string;
+  course_title: string;
+  mid_weight: string;
+  sessional_weight: string;
+  final_weight: string;
+  practical_weight: string;
+};
+
+export type ScheduleException = {
+  exception_id: string;
+  schedule_id: string | null;
+  date: string;
+  exception_type: "cancelled" | "rescheduled" | "extra";
+  new_start_time: string | null;
+  new_end_time: string | null;
+  new_room: string | null;
+  course_code: string;
+};
+
+export type TeachingSlot = {
+  schedule_id: string;
+  offering_id: string;
+  course_id: string;
+  course_code: string;
+  course_title: string;
+  section: string;
+  semester: string;
+  room: string | null;
+  start_time: string;
+  end_time: string;
+  capacity: number;
+  enrolled_count: number;
+  exceptions: ScheduleException[];
+};
+
+export type TeachingTimetable = {
+  days: Record<string, TeachingSlot[]>;
+  exceptions: ScheduleException[];
+};
+
+export const DAY_ORDER = [
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+] as const;
+
+export type AttendanceStatus = "present" | "absent" | "late" | "leave";
+
+export type AttendanceSession = {
+  id: string;
+  offering_id: string;
+  date: string;
+};
+
+export type AttendanceRecord = {
+  id: string;
+  session_id: string;
+  enrollment_id: string;
+  status: AttendanceStatus;
+  roll_number: string;
+  email: string;
+};
+
+export type AttendanceStat = {
+  student_id: string;
+  roll_number: string;
+  total_lectures: number;
+  leaves: number;
+  adjusted_total: number;
+  present: number;
+  absent: number;
+  late: number;
+  attendance_percentage: number;
+  eligible_for_exam: boolean;
+};
+
+/**
+ * Assessment types accepted by POST /grades. The first four resolve their
+ * title/max_score from a referenced assignment; the rest require both to be
+ * supplied explicitly.
+ */
+export const ASSESSMENT_TYPES = [
+  "midterm",
+  "sessional",
+  "final",
+  "practical",
+  "quiz",
+  "assignment",
+  "presentation",
+  "project",
+] as const;
+
+export type AssessmentType = (typeof ASSESSMENT_TYPES)[number];
+
+/** These derive title + max_score from `reference_id` server-side. */
+export const REFERENCE_BACKED_ASSESSMENTS: AssessmentType[] = [
+  "assignment",
+  "quiz",
+  "presentation",
+  "project",
+];
+
+export type Grade = {
+  id: string;
+  enrollment_id: string;
+  assessment_type: AssessmentType;
+  reference_id: string | null;
+  title: string;
+  score: string;
+  max_score: string;
+  roll_number: string;
+  email: string;
+};
+
+export const ASSESSMENT_WEIGHT_FIELDS = [
+  "mid_weight",
+  "sessional_weight",
+  "final_weight",
+  "practical_weight",
+] as const;
+
+export type AssessmentWeightField = (typeof ASSESSMENT_WEIGHT_FIELDS)[number];
+
+export const WEIGHT_LABELS: Record<AssessmentWeightField, string> = {
+  mid_weight: "Mid term",
+  sessional_weight: "Sessional",
+  final_weight: "Final exam",
+  practical_weight: "Practical",
+};

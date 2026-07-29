@@ -4,17 +4,16 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useSidebar } from "../context/SidebarContext";
+import { useAuth } from "../context/AuthContext";
 import {
   BoxCubeIcon,
   CalenderIcon,
   ChevronDownIcon,
   GridIcon,
+  GroupIcon,
   HorizontaLDots,
   ListIcon,
-  PageIcon,
-  PieChartIcon,
-  PlugInIcon,
-  TableIcon,
+  PaperPlaneIcon,
   UserCircleIcon,
 } from "../icons/index";
 import SidebarWidget from "./SidebarWidget";
@@ -26,77 +25,43 @@ type NavItem = {
   subItems?: { name: string; path: string; pro?: boolean; new?: boolean }[];
 };
 
-const navItems: NavItem[] = [
+// Only real, working routes are linked here. As each module from
+// DASHBOARD_PLAN.md gets its own page, add it as a real entry —
+// avoid placeholder links that don't go anywhere distinct.
+const ADMIN_NAV_ITEMS: NavItem[] = [
+  { icon: <GridIcon />, name: "Dashboard", path: "/admin" },
+  { icon: <GroupIcon />, name: "User Provisioning", path: "/admin/users" },
   {
-    icon: <GridIcon />,
-    name: "Dashboard",
-    subItems: [{ name: "Ecommerce", path: "/", pro: false }],
+    icon: <BoxCubeIcon />,
+    name: "Academic Setup",
+    subItems: [
+      { name: "Courses", path: "/admin/courses" },
+      { name: "Offerings", path: "/admin/offerings" },
+    ],
   },
-  {
-    icon: <CalenderIcon />,
-    name: "Calendar",
-    path: "/calendar",
-  },
+  { icon: <ListIcon />, name: "Enrollments", path: "/admin/enrollments" },
+  { icon: <PaperPlaneIcon />, name: "Announcements", path: "/admin/announcements" },
+  { icon: <CalenderIcon />, name: "Events", path: "/admin/events" },
+];
+
+const TEACHER_NAV_ITEMS: NavItem[] = [
+  { icon: <GridIcon />, name: "My Classes", path: "/teacher" },
+];
+
+const othersItems: NavItem[] = [
   {
     icon: <UserCircleIcon />,
     name: "User Profile",
     path: "/profile",
   },
-
-  {
-    name: "Forms",
-    icon: <ListIcon />,
-    subItems: [{ name: "Form Elements", path: "/form-elements", pro: false }],
-  },
-  {
-    name: "Tables",
-    icon: <TableIcon />,
-    subItems: [{ name: "Basic Tables", path: "/basic-tables", pro: false }],
-  },
-  {
-    name: "Pages",
-    icon: <PageIcon />,
-    subItems: [
-      { name: "Blank Page", path: "/blank", pro: false },
-      { name: "404 Error", path: "/error-404", pro: false },
-    ],
-  },
-];
-
-const othersItems: NavItem[] = [
-  {
-    icon: <PieChartIcon />,
-    name: "Charts",
-    subItems: [
-      { name: "Line Chart", path: "/line-chart", pro: false },
-      { name: "Bar Chart", path: "/bar-chart", pro: false },
-    ],
-  },
-  {
-    icon: <BoxCubeIcon />,
-    name: "UI Elements",
-    subItems: [
-      { name: "Alerts", path: "/alerts", pro: false },
-      { name: "Avatar", path: "/avatars", pro: false },
-      { name: "Badge", path: "/badge", pro: false },
-      { name: "Buttons", path: "/buttons", pro: false },
-      { name: "Images", path: "/images", pro: false },
-      { name: "Videos", path: "/videos", pro: false },
-    ],
-  },
-  {
-    icon: <PlugInIcon />,
-    name: "Authentication",
-    subItems: [
-      { name: "Sign In", path: "/signin", pro: false },
-      { name: "Sign Up", path: "/signup", pro: false },
-    ],
-  },
 ];
 
 const AppSidebar: React.FC = () => {
   const { isExpanded, isMobileOpen, isHovered, setIsHovered } = useSidebar();
+  const { user } = useAuth();
   const pathname = usePathname();
+
+  const navItems = user?.role === "teacher" ? TEACHER_NAV_ITEMS : ADMIN_NAV_ITEMS;
 
   const renderMenuItems = (
     navItems: NavItem[],
@@ -224,10 +189,28 @@ const AppSidebar: React.FC = () => {
     </ul>
   );
 
-  const [openSubmenu, setOpenSubmenu] = useState<{
-    type: "main" | "others";
-    index: number;
-  } | null>(null);
+  type OpenSubmenu = { type: "main" | "others"; index: number } | null;
+
+  // Which submenu the current route lives in, if any. Cheap enough to derive
+  // every render; the compiler handles memoization.
+  const submenuForPath: OpenSubmenu = (() => {
+    const groups: { type: "main" | "others"; items: NavItem[] }[] = [
+      { type: "main", items: navItems },
+      { type: "others", items: othersItems },
+    ];
+
+    for (const group of groups) {
+      const index = group.items.findIndex((nav) =>
+        nav.subItems?.some((subItem) => subItem.path === pathname)
+      );
+      if (index !== -1) return { type: group.type, index };
+    }
+
+    return null;
+  })();
+
+  // Seeded from the route so a deep link lands with its submenu already open.
+  const [openSubmenu, setOpenSubmenu] = useState<OpenSubmenu>(submenuForPath);
   const [subMenuHeight, setSubMenuHeight] = useState<Record<string, number>>(
     {}
   );
@@ -236,31 +219,14 @@ const AppSidebar: React.FC = () => {
   // const isActive = (path: string) => path === pathname;
    const isActive = useCallback((path: string) => path === pathname, [pathname]);
 
-  useEffect(() => {
-    // Check if the current path matches any submenu item
-    let submenuMatched = false;
-    ["main", "others"].forEach((menuType) => {
-      const items = menuType === "main" ? navItems : othersItems;
-      items.forEach((nav, index) => {
-        if (nav.subItems) {
-          nav.subItems.forEach((subItem) => {
-            if (isActive(subItem.path)) {
-              setOpenSubmenu({
-                type: menuType as "main" | "others",
-                index,
-              });
-              submenuMatched = true;
-            }
-          });
-        }
-      });
-    });
-
-    // If no submenu item matches, close the open submenu
-    if (!submenuMatched) {
-      setOpenSubmenu(null);
-    }
-  }, [pathname,isActive]);
+  // Navigating away discards any manual open/close the user did. Adjusting
+  // state during render (rather than in an effect) is React's recommended
+  // pattern for derived state that still has to survive user overrides.
+  const [trackedPathname, setTrackedPathname] = useState(pathname);
+  if (trackedPathname !== pathname) {
+    setTrackedPathname(pathname);
+    setOpenSubmenu(submenuForPath);
+  }
 
   useEffect(() => {
     // Set the height of the submenu items when the submenu is opened

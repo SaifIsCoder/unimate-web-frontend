@@ -1,42 +1,17 @@
-import type { Metadata } from "next";
-import { EcommerceMetrics } from "@/components/ecommerce/EcommerceMetrics";
-import React from "react";
-import MonthlyTarget from "@/components/ecommerce/MonthlyTarget";
-import MonthlySalesChart from "@/components/ecommerce/MonthlySalesChart";
-import StatisticsChart from "@/components/ecommerce/StatisticsChart";
-import RecentOrders from "@/components/ecommerce/RecentOrders";
-import DemographicCard from "@/components/ecommerce/DemographicCard";
+"use client";
 
-export const metadata: Metadata = {
-  title:
-    "uniMate | Admin & Teacher Dashboard",
-  description: "This is Next.js Home for uniMate - Admin & Teacher Dashboard",
-};
+import { homePathForRole, useAuth } from "@/context/AuthContext";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
-export default function Ecommerce() {
-  return (
-    <div className="grid grid-cols-12 gap-4 md:gap-6">
-      <div className="col-span-12 space-y-6 xl:col-span-7">
-        <EcommerceMetrics />
+export default function DashboardHomeRedirect() {
+  const { user, loading } = useAuth();
+  const router = useRouter();
 
-        <MonthlySalesChart />
-      </div>
+  useEffect(() => {
+    if (loading) return;
+    router.replace(homePathForRole(user?.role));
+  }, [loading, user, router]);
 
-      <div className="col-span-12 xl:col-span-5">
-        <MonthlyTarget />
-      </div>
-
-      <div className="col-span-12">
-        <StatisticsChart />
-      </div>
-
-      <div className="col-span-12 xl:col-span-5">
-        <DemographicCard />
-      </div>
-
-      <div className="col-span-12 xl:col-span-7">
-        <RecentOrders />
-      </div>
-    </div>
-  );
+  return null;
 }

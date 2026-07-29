@@ -6,6 +6,8 @@ interface InputProps {
   name?: string;
   placeholder?: string;
   defaultValue?: string | number;
+  /** Pass `value` (with onChange) for a controlled input; omit it to stay uncontrolled. */
+  value?: string | number;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   className?: string;
   min?: string;
@@ -23,6 +25,7 @@ const Input: FC<InputProps> = ({
   name,
   placeholder,
   defaultValue,
+  value,
   onChange,
   className = "",
   min,
@@ -47,6 +50,10 @@ const Input: FC<InputProps> = ({
     inputClasses += ` bg-transparent text-gray-800 border-gray-300 focus:border-brand-300 focus:ring-3 focus:ring-brand-500/10 dark:border-gray-700 dark:bg-gray-900 dark:text-white/90 dark:focus:border-brand-800`;
   }
 
+  // React warns if both are supplied, so let `value` win when present.
+  const valueProps =
+    value !== undefined ? { value } : { defaultValue };
+
   return (
     <div className="relative">
       <input
@@ -54,7 +61,7 @@ const Input: FC<InputProps> = ({
         id={id}
         name={name}
         placeholder={placeholder}
-        defaultValue={defaultValue}
+        {...valueProps}
         onChange={onChange}
         min={min}
         max={max}
