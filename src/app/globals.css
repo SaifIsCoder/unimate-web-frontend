@@ -750,3 +750,48 @@ span.flatpickr-weekday,
   opacity: 0.8;
   cursor: grabbing; /* Changes the cursor to indicate dragging */
 }
+
+/* ── Print: transcript export ────────────────────────────────────────────────
+   Export is window.print() + the browser's "Save as PDF", rather than jsPDF or
+   html2canvas. The transcript is a table of text: printing yields real
+   selectable text at the user's paper size, html2canvas would rasterise it into
+   a blurry image, and jsPDF would mean maintaining this layout twice.
+
+   The classic visibility trick: hide everything, re-show the transcript and its
+   descendants, then lift it to the page origin. `visibility` (not `display`)
+   is used deliberately — it leaves ancestors in the layout tree, so the
+   transcript keeps its containing block and does not collapse. */
+@media print {
+  body {
+    background: #fff;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  #transcript-document,
+  #transcript-document * {
+    visibility: visible;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  #transcript-document {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Keep a semester's table off a page boundary where it fits. */
+  .break-inside-avoid {
+    break-inside: avoid;
+  }
+
+  @page {
+    margin: 16mm;
+  }
+}

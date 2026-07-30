@@ -51,7 +51,7 @@ Joi with `stripUnknown: true`, `allowUnknown: false`, `convert: true`. Unknown k
 
 ## 2. Current Implementation Status
 
-The dashboard is well past boilerplate. **79 of 134 endpoints (59%) are reachable** from `src/config/api.ts` as of Phase 4.
+The dashboard is well past boilerplate. **85 of 134 endpoints (63%) are reachable** from `src/config/api.ts` as of Phase 5.
 
 ### Built and working
 
@@ -341,7 +341,7 @@ Auth + session, RBAC route groups, user provisioning, courses, offerings, enroll
 
 ---
 
-### Phase 5 — Complete the Gradebook
+### Phase 5 — Complete the Gradebook ✅ *(delivered 2026-07-30)*
 **Depends on:** Phase 4 — assignment-type grades cannot be submitted without an assignment to reference.
 
 - Assignment-linked grading: pick the assignment, send `reference_id`; `title`/`max_score` come from the server.

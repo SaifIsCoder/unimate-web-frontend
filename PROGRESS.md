@@ -4,8 +4,8 @@ Running record of the phased build described in `dashboard_architecture_plan.md`
 Updated at the end of every phase. Each entry states what shipped, how it was
 verified, and what was deliberately left out.
 
-**Backend surface reachable from the dashboard: 79 / 134 endpoints (59%).**
-Phases 1 and 1.x were foundation work; Phase 2 added 15, Phase 3 added 6, Phase 4 added 7.
+**Backend surface reachable from the dashboard: 85 / 134 endpoints (63%).**
+Phases 1 and 1.x were foundation work; Phase 2 added 15, Phase 3 added 6, Phase 4 added 7, Phase 5 added 6.
 
 **Lint: 0 errors, 0 warnings** as of Phase 4.
 
@@ -18,7 +18,7 @@ Phases 1 and 1.x were foundation work; Phase 2 added 15, Phase 3 added 6, Phase 
 | **2** | **Complete admin foundations (Departments, Student Directory, Faculty Roster, Admin Directory)** | **✅ Complete — 2026-07-30** |
 | **3** | **Master Timetable (schedules + exceptions)** | **✅ Complete — 2026-07-30** |
 | **4** | **Assignments & Tasks** | **✅ Complete — 2026-07-30** |
-| 5 | Complete the gradebook (transcripts, weights, attendance reporting) | ⬜ Not started |
+| **5** | **Complete the gradebook (transcripts, weights, attendance reporting)** | **✅ Complete — 2026-07-30** |
 | 6 | Communications & community (needs BE-1 for moderation) | ⬜ Blocked in part |
 | 7 | Analytics & polish (needs BE-4, BE-5) | ⬜ Blocked |
 
@@ -679,3 +679,133 @@ teacher 200, admin 307).
 - `GET /assignments/:id` is unused by the workspace, since the list row carries
   strictly more of what the teacher needs. It is wired and typed for when a
   dedicated detail route wants it.
+
+---
+
+## Phase 5 — Complete the Gradebook ✅
+
+**Backend coverage: 79 → 85 of 134 endpoints (59% → 63%).** Grades 3/9 → 6/9,
+attendance 4/8 → 6/8.
+
+### Shipped
+
+| Piece | File |
+| :--- | :--- |
+| Grade service, bifurcated payload | `services/gradeService.ts` |
+| Attendance service, extracted | `services/attendanceService.ts` |
+| Gradebook rules (pure, tested) | `lib/gradebook.ts` |
+| Weighted breakdown | `components/teacher/GradeCalculationCard.tsx` |
+| Weights editor | `components/admin/WeightsEditor.tsx` |
+| Printable transcript | `components/admin/TranscriptView.tsx` |
+| Attendance report | `/admin/attendance` |
+| Transcript export | `/admin/transcripts` |
+
+### The payload split
+
+`POST /grades` takes two mutually exclusive shapes, and sending the wrong one is
+a 400 or 404 rather than a warning:
+
+| Types | Requires | Must omit |
+| :--- | :--- | :--- |
+| assignment · quiz · presentation · project | `reference_id` | `title`, `max_score` |
+| sessional · midterm · final · practical | `title`, `max_score` | `reference_id` |
+
+`submitGrade` **rebuilds the body field by field** rather than spreading, so a
+stray `max_score` cannot ride along on a reference-backed grade from leftover
+form state. The types are a discriminated union with an `isReferenceBackedPayload`
+guard, so the compiler enforces the split at every call site.
+
+The form bifurcates with it: reference-backed types show an assignment picker,
+direct types show title and max-score fields. Showing both would imply the
+server accepts both.
+
+Two details worth keeping:
+- The picker only offers assignments of the **same assessment type**. The server
+  joins grades to assignments on `assessment_type` as well as id, so grading a
+  quiz against a "project" assignment would create a row the student view never
+  joins to.
+- Score validation uses the **assignment's** `total_points` as the ceiling for
+  reference-backed grades, because the server overwrites `max_score` from it —
+  validating against anything else would pass scores the server then rejects.
+
+Previously `GradesPanel` blocked these four types entirely ("grade those from
+the assignments module"), which was correct before Phase 4 and is now wired.
+
+### Weighted preview
+
+`GradeCalculationCard` renders `/calculation` per student: raw marks, final
+marks, letter, grade point and the per-component breakdown with each
+component's weight and contribution.
+
+**Nothing is recomputed client-side.** The server owns the weighting, the
+`Math.ceil` rounding and the UOS scale; a second implementation would eventually
+disagree with the transcript, which is the document that counts. Raw and final
+marks are both shown because the rounding is *up* — 81.4 becomes 82, which can
+cross a grade boundary, and that jump should not be a mystery.
+
+### Weights editor — and a gap the API leaves open
+
+**The API validates each weight 0–100 individually and never checks they sum to
+100.** A set totalling 90 silently caps every student at 90 marks; 110 lets them
+exceed 100. Neither is reported by the server, so `validateWeights` blocks both
+client-side and a running total is shown live. Existing bad sets are flagged with
+a red badge in the offerings table, since they may already be in the database.
+
+The warning is the loudest element on the screen, and it is accurate rather than
+generic: weights are **not** snapshotted onto grades — every mark, letter, grade
+point and CGPA is recomputed from them on read, so a change rewrites history for
+the whole class with no audit trail. Saving requires a second confirming press.
+
+Two non-blocking warnings: a practical weight on a course with no practical
+component (its share is always lost), and a practical course whose practical
+weight is zero (those marks never count).
+
+### Transcript export — print, not a PDF library
+
+`window.print()` against a print stylesheet, rather than jsPDF or html2canvas.
+
+For a table of text this is both cleanest and highest-fidelity: it produces real
+selectable text at the user's paper size, whereas html2canvas rasterises the page
+into a blurry image and jsPDF would mean maintaining this layout twice in two
+different APIs. The browser's "Save as PDF" destination covers the requirement
+with **no dependency at all**.
+
+The stylesheet uses `visibility` rather than `display` to hide the chrome, which
+keeps ancestors in the layout tree so the transcript retains its containing
+block. Grade badges lose their colour in print, so the letter is also emitted as
+plain text for the printed copy.
+
+Transcripts are **admin-only** — the API 403s teachers explicitly — so this lives
+under `/admin` and is never linked from the teacher workspace.
+
+### Attendance reporting
+
+`/admin/attendance` leads with eligibility, because that is the reason the screen
+exists: a banner naming every student who cannot sit the final exam, then the
+per-student table, then per-session drill-down.
+
+`eligible_for_exam` is taken verbatim from the server and **never recomputed**.
+The server excludes approved leaves from the denominator
+(`adjusted_total = total_lectures − leaves`), and a client reimplementation would
+drift from the rule that actually decides who sits the exam. The UI says the
+percentage is out of *adjusted* lectures so the number is not misread.
+
+### Verified
+
+lint **0/0** · typecheck clean · **204 tests** (28 new, covering the payload
+split, weight validation including floating-point drift, and grade helpers) ·
+build clean, 22 routes · runtime gating: `/admin/attendance` and
+`/admin/transcripts` both anon 307, teacher 307, admin 200, super_admin 200.
+
+### Known limitations
+
+- **No grade lock** (BE-3). Nothing freezes marks at semester end, and weights
+  stay editable forever.
+- Transcripts include only *actively enrolled* offerings, so a dropped course
+  vanishes from the CGPA rather than counting as a fail. That is the server's
+  rule, surfaced in the footnote.
+- Grades are written one request per student — there is no bulk endpoint — so a
+  large class is a slow sequential run. Deliberate: parallel writes would trip
+  the 100-per-15-minutes limiter.
+- The transcript is computed live, not sealed. Re-exporting after a grade or
+  weight change produces a different document; the footnote says so.

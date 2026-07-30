@@ -110,6 +110,20 @@ const SECTIONS: NavSection[] = [
     ],
   },
   {
+    title: "Reports",
+    items: [
+      {
+        name: "Reports",
+        icon: <ListIcon />,
+        roles: ADMIN,
+        subItems: [
+          { name: "Attendance", path: "/admin/attendance", roles: ADMIN },
+          { name: "Transcripts", path: "/admin/transcripts", roles: ADMIN },
+        ],
+      },
+    ],
+  },
+  {
     title: "Communications",
     items: [
       {

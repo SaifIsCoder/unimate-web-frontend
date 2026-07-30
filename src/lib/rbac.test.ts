@@ -106,6 +106,14 @@ describe("the route access matrix", () => {
     ["admin", "/profile", "allow"],
     ["admin", "/teacher", "redirect"],
 
+    // Phase 5 reports
+    ["admin", "/admin/attendance", "allow"],
+    ["admin", "/admin/transcripts", "allow"],
+    ["super_admin", "/admin/transcripts", "allow"],
+    // Transcripts are admin-only server-side too — the API 403s teachers.
+    ["teacher", "/admin/transcripts", "redirect"],
+    ["teacher", "/admin/attendance", "redirect"],
+
     // Phase 3 master timetable
     ["admin", "/admin/timetable", "allow"],
     ["super_admin", "/admin/timetable", "allow"],
@@ -194,6 +202,8 @@ describe("navigation reflects the same permissions", () => {
       "/admin/students",
       "/admin/faculty",
       "/admin/timetable",
+      "/admin/attendance",
+      "/admin/transcripts",
     ]) {
       expect(links).toContain(path);
     }

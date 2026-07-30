@@ -466,3 +466,41 @@ export type AssignmentDetail = {
   teacherRemarks: string;
   submissionAllowed: boolean;
 };
+
+// ── Phase 5: gradebook ───────────────────────────────────────────────────────
+
+/** `GET /grades/student/:studentId/offering/:offeringId/calculation`. */
+export type GradeCalculation = {
+  raw_marks: number;
+  /** Math.ceil of raw_marks — the value the letter grade is derived from. */
+  final_marks: number;
+  letter_grade: string;
+  grade_point: number;
+  has_practical: boolean;
+  /** Each component normalised to a percentage, before weighting. */
+  components: {
+    mid_term: number;
+    sessional: number;
+    final_exam: number;
+    practical: number;
+  };
+};
+
+/** One course row of `GET /grades/student/:studentId/transcript`. */
+export type TranscriptCourse = {
+  offering_id: string;
+  semester: string;
+  course_code: string;
+  course: string;
+  credit_hours: number;
+  final_marks: number;
+  letter_grade: string;
+  grade_point: number;
+  quality_points: number;
+};
+
+export type Transcript = {
+  cgpa: number;
+  total_credit_hours: number;
+  courses: TranscriptCourse[];
+};

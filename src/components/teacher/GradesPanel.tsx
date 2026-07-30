@@ -12,10 +12,13 @@ import FeedbackBanner, {
   type Feedback,
 } from "@/components/admin/FeedbackBanner";
 import DataTable, { type Column } from "@/components/admin/DataTable";
-import { listGradesByOffering, submitGradeColumn } from "@/services/teachingService";
+import { listGradesByOffering, submitGradeColumn } from "@/services/gradeService";
+import { listAssignmentsByOffering } from "@/services/assignmentService";
+import { isReferenceBacked } from "@/lib/gradebook";
+import GradeCalculationCard from "@/components/teacher/GradeCalculationCard";
 import {
   ASSESSMENT_TYPES,
-  REFERENCE_BACKED_ASSESSMENTS,
+  type Assignment,
   type AssessmentType,
   type Enrollment,
   type Grade,
@@ -50,6 +53,11 @@ export default function GradesPanel({ offering, roster, rosterLoading }: GradesP
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  /** Assignments available to back a reference-backed grade. */
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [referenceId, setReferenceId] = useState("");
+  /** Student whose weighted breakdown is open, if any. */
+  const [previewStudent, setPreviewStudent] = useState<Enrollment | null>(null);
 
   const activeRoster = useMemo(
     () => roster.filter((row) => row.status === "enrolled"),
@@ -75,17 +83,24 @@ export default function GradesPanel({ offering, roster, rosterLoading }: GradesP
     let alive = true;
 
     void (async () => {
-      try {
-        const page = await listGradesByOffering(offering.id);
-        if (alive) {
-          setGrades(page.data);
-          setGradesError(null);
-        }
-      } catch (error) {
-        if (alive) setGradesError(errorMessage(error, "Could not load the gradebook."));
-      } finally {
-        if (alive) setLoadingGrades(false);
+      // Assignments only populate the reference picker, so they degrade to an
+      // empty list rather than blocking the gradebook.
+      const [gradeResult, assignmentResult] = await Promise.allSettled([
+        listGradesByOffering(offering.id),
+        listAssignmentsByOffering(offering.id),
+      ]);
+
+      if (!alive) return;
+
+      if (gradeResult.status === "fulfilled") {
+        setGrades(gradeResult.value.data);
+        setGradesError(null);
+      } else {
+        setGradesError(errorMessage(gradeResult.reason, "Could not load the gradebook."));
       }
+
+      setAssignments(assignmentResult.status === "fulfilled" ? assignmentResult.value : []);
+      setLoadingGrades(false);
     })();
 
     return () => {
@@ -93,9 +108,29 @@ export default function GradesPanel({ offering, roster, rosterLoading }: GradesP
     };
   }, [offering.id]);
 
-  // Reference-backed types take their title and max score from a linked
-  // assignment, which lives in the assignments module rather than here.
-  const needsReference = REFERENCE_BACKED_ASSESSMENTS.includes(assessmentType);
+  /**
+   * Reference-backed types (assignment/quiz/presentation/project) must carry a
+   * `reference_id` and must NOT carry title or max_score — the server takes
+   * both from the linked assignment. Direct types are the exact inverse.
+   */
+  const needsReference = isReferenceBacked(assessmentType);
+
+  /** The assignment backing a reference-backed grade, if one is selected. */
+  const selectedAssignment = useMemo(
+    () => assignments.find((item) => item.id === referenceId) ?? null,
+    [assignments, referenceId],
+  );
+
+  /**
+   * Only assignments of the *same* assessment type are offerable: the server
+   * matches grades to assignments on `assessment_type` as well as id, so
+   * grading a quiz against a "project" assignment would create a row the
+   * student view never joins to.
+   */
+  const referenceOptions = useMemo(
+    () => assignments.filter((item) => item.assessment_type === assessmentType),
+    [assignments, assessmentType],
+  );
 
   const weightFor = (type: AssessmentType): string | null => {
     if (type === "midterm") return offering.mid_weight;
@@ -127,20 +162,40 @@ export default function GradesPanel({ offering, roster, rosterLoading }: GradesP
     [activeRoster, scores],
   );
 
+  /**
+   * The score ceiling. For reference-backed grades this comes from the linked
+   * assignment, because the server overwrites max_score from it — validating
+   * against anything else would let through scores the server then rejects.
+   */
+  const effectiveMax = needsReference
+    ? selectedAssignment
+      ? Number(selectedAssignment.total_points)
+      : Number.NaN
+    : Number(maxScore);
+
   const validate = (): boolean => {
     const next: Record<string, string> = {};
-    const max = Number(maxScore);
 
-    if (!title.trim()) next.title = "A title is required for this assessment type.";
-    if (!Number.isFinite(max) || max <= 0) next.maxScore = "Max score must be a positive number.";
+    if (needsReference) {
+      if (!referenceId) {
+        next.reference =
+          "Select the assignment this grade belongs to — the server requires it for this type.";
+      }
+    } else {
+      if (!title.trim()) next.title = "A title is required for this assessment type.";
+      if (!Number.isFinite(effectiveMax) || effectiveMax <= 0) {
+        next.maxScore = "Max score must be a positive number.";
+      }
+    }
+
     if (entries.length === 0) next.scores = "Enter at least one score.";
 
     for (const entry of entries) {
       const score = Number(entry.raw);
       if (!Number.isFinite(score) || score < 0) {
         next[entry.studentId] = "Invalid";
-      } else if (Number.isFinite(max) && score > max) {
-        next[entry.studentId] = `> ${max}`;
+      } else if (Number.isFinite(effectiveMax) && score > effectiveMax) {
+        next[entry.studentId] = `> ${effectiveMax}`;
       }
     }
 
@@ -150,25 +205,38 @@ export default function GradesPanel({ offering, roster, rosterLoading }: GradesP
 
   const handleSubmit = async () => {
     setFeedback(null);
-    if (needsReference) {
-      setFeedback({
-        variant: "error",
-        title: "Not gradable here",
-        message: `${TYPE_LABELS[assessmentType]} scores are tied to a specific assignment and take their title and max score from it. Grade those from the assignments module.`,
-      });
-      return;
-    }
     if (!validate()) return;
 
     setSubmitting(true);
     try {
+      /**
+       * The two payload shapes are built separately rather than conditionally
+       * spread, so a stray `max_score` can never ride along on a
+       * reference-backed grade (or a stray `reference_id` on a direct one).
+       */
+      const base = needsReference
+        ? {
+            offering_id: offering.id,
+            assessment_type: assessmentType as
+              | "assignment"
+              | "quiz"
+              | "presentation"
+              | "project",
+            reference_id: referenceId,
+          }
+        : {
+            offering_id: offering.id,
+            assessment_type: assessmentType as
+              | "sessional"
+              | "midterm"
+              | "final"
+              | "practical",
+            title: title.trim(),
+            max_score: Number(maxScore),
+          };
+
       const outcome = await submitGradeColumn(
-        {
-          offering_id: offering.id,
-          assessment_type: assessmentType,
-          title: title.trim(),
-          max_score: Number(maxScore),
-        },
+        base,
         entries.map((entry) => ({
           studentId: entry.studentId,
           rollNumber: entry.rollNumber,
@@ -261,34 +329,72 @@ export default function GradesPanel({ offering, roster, rosterLoading }: GradesP
             />
           </FormRow>
 
-          <FormRow label="Title" htmlFor="grade_title" required error={errors.title}>
-            <Input
-              id="grade_title"
-              value={title}
-              disabled={needsReference}
-              error={Boolean(errors.title)}
-              onChange={(e) => setTitle(e.target.value)}
-            />
-          </FormRow>
+          {/*
+            The form bifurcates with the payload. Reference-backed types get an
+            assignment picker and take their title and max score from it;
+            direct types get the title and max-score fields instead. Showing
+            both at once would imply the server accepts both, which it does not.
+          */}
+          {needsReference ? (
+            <FormRow
+              label="Assignment"
+              htmlFor="reference_id"
+              required
+              error={errors.reference}
+              hint={
+                selectedAssignment
+                  ? `Max score ${Number(selectedAssignment.total_points)}, taken from the assignment.`
+                  : "Only assignments of this type can be selected."
+              }
+            >
+              <Select
+                id="reference_id"
+                value={referenceId}
+                placeholder={
+                  referenceOptions.length
+                    ? "Select an assignment"
+                    : `No ${TYPE_LABELS[assessmentType].toLowerCase()} assignments yet`
+                }
+                options={referenceOptions.map((item) => ({
+                  value: item.id,
+                  label: `${item.title} · ${Number(item.total_points)} pts`,
+                }))}
+                onChange={(value) => {
+                  setReferenceId(value);
+                  setErrors((previous) => ({ ...previous, reference: undefined as never }));
+                }}
+              />
+            </FormRow>
+          ) : (
+            <>
+              <FormRow label="Title" htmlFor="grade_title" required error={errors.title}>
+                <Input
+                  id="grade_title"
+                  value={title}
+                  error={Boolean(errors.title)}
+                  onChange={(e) => setTitle(e.target.value)}
+                />
+              </FormRow>
 
-          <FormRow label="Max score" htmlFor="max_score" required error={errors.maxScore}>
-            <Input
-              id="max_score"
-              type="number"
-              min="1"
-              value={maxScore}
-              disabled={needsReference}
-              error={Boolean(errors.maxScore)}
-              onChange={(e) => setMaxScore(e.target.value)}
-            />
-          </FormRow>
+              <FormRow label="Max score" htmlFor="max_score" required error={errors.maxScore}>
+                <Input
+                  id="max_score"
+                  type="number"
+                  min="1"
+                  value={maxScore}
+                  error={Boolean(errors.maxScore)}
+                  onChange={(e) => setMaxScore(e.target.value)}
+                />
+              </FormRow>
+            </>
+          )}
         </div>
 
-        {needsReference && (
-          <p className="rounded-lg border border-warning-500 bg-warning-50 p-3 text-sm text-warning-600 dark:border-warning-500/30 dark:bg-warning-500/15 dark:text-orange-400">
-            {TYPE_LABELS[assessmentType]} grades must reference an existing assignment, which
-            supplies their title and max score. Record them from the assignments module
-            instead — submitting here would be rejected.
+        {needsReference && referenceOptions.length === 0 && (
+          <p className="rounded-lg border border-warning-300 bg-warning-50 p-3 text-sm text-warning-700 dark:border-warning-700 dark:bg-warning-500/10 dark:text-warning-400">
+            There are no {TYPE_LABELS[assessmentType].toLowerCase()} assignments on this
+            class yet. Create one in the <strong>Assignments</strong> tab first — the
+            server requires a real assignment to attach this grade to.
           </p>
         )}
 
@@ -323,7 +429,6 @@ export default function GradesPanel({ offering, roster, rosterLoading }: GradesP
                         min="0"
                         placeholder="—"
                         value={scores[row.student_id] ?? ""}
-                        disabled={needsReference}
                         error={Boolean(errors[row.student_id])}
                         onChange={(e) =>
                           setScores((previous) => ({
@@ -336,12 +441,33 @@ export default function GradesPanel({ offering, roster, rosterLoading }: GradesP
                     <span className="w-16 text-xs text-error-500">
                       {errors[row.student_id] ?? ""}
                     </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setPreviewStudent((current) =>
+                          current?.student_id === row.student_id ? null : row,
+                        )
+                      }
+                      className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
+                    >
+                      {previewStudent?.student_id === row.student_id ? "Hide" : "Breakdown"}
+                    </button>
                   </div>
                 </li>
               ))}
             </ul>
           )}
         </div>
+
+        {/* Weighted preview for one student, straight from the server. */}
+        {previewStudent && (
+          <GradeCalculationCard
+            studentId={previewStudent.student_id}
+            studentLabel={previewStudent.roll_number}
+            offering={offering}
+            onClose={() => setPreviewStudent(null)}
+          />
+        )}
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -350,7 +476,11 @@ export default function GradesPanel({ offering, roster, rosterLoading }: GradesP
           </p>
           <Button
             onClick={handleSubmit}
-            disabled={submitting || needsReference || activeRoster.length === 0}
+            disabled={
+              submitting ||
+              activeRoster.length === 0 ||
+              (needsReference && referenceOptions.length === 0)
+            }
           >
             {submitting ? "Saving…" : "Save grades"}
           </Button>

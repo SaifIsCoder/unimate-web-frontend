@@ -13,11 +13,14 @@ import FeedbackBanner, {
   type Feedback,
 } from "@/components/admin/FeedbackBanner";
 import DataTable, { type Column } from "@/components/admin/DataTable";
+import WeightsEditor from "@/components/admin/WeightsEditor";
+import { weightsFromOffering, weightsTotal } from "@/lib/gradebook";
 import {
   createOffering,
   listCourses,
   listOfferings,
   listTeachers,
+  updateOffering,
 } from "@/services/academicService";
 import {
   ASSESSMENT_WEIGHT_FIELDS,
@@ -66,6 +69,10 @@ export default function OfferingsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  /** Offering whose weights are being edited, if any. */
+  const [weightsFor, setWeightsFor] = useState<Offering | null>(null);
+  const [savingWeights, setSavingWeights] = useState(false);
+  const [weightsError, setWeightsError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -230,10 +237,41 @@ export default function OfferingsPage() {
     {
       key: "weights",
       header: "Weights (M/S/F/P)",
-      render: (row) =>
-        `${Number(row.mid_weight)}/${Number(row.sessional_weight)}/${Number(
-          row.final_weight,
-        )}/${Number(row.practical_weight)}`,
+      render: (row) => {
+        const total = weightsTotal(weightsFromOffering(row));
+        return (
+          <span className="flex items-center gap-2">
+            {`${Number(row.mid_weight)}/${Number(row.sessional_weight)}/${Number(
+              row.final_weight,
+            )}/${Number(row.practical_weight)}`}
+            {/* The API never checks weights sum to 100, so a bad set can already
+                exist in the database — flag it wherever it is displayed. */}
+            {Math.abs(total - 100) > 0.001 && (
+              <Badge size="sm" color="error">
+                {total}%
+              </Badge>
+            )}
+          </span>
+        );
+      },
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      className: "text-right",
+      render: (row) => (
+        <button
+          type="button"
+          onClick={() => {
+            setWeightsFor(row);
+            setWeightsError(null);
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+          className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
+        >
+          Edit weights
+        </button>
+      ),
     },
   ];
 
@@ -242,6 +280,43 @@ export default function OfferingsPage() {
       <PageBreadcrumb pageTitle="Course Offerings" />
 
       <div className="space-y-6">
+        {weightsFor && (
+          <ComponentCard
+            title={`Assessment weights — ${weightsFor.course_code} · ${weightsFor.section}`}
+            desc={`${weightsFor.course_title} · ${weightsFor.semester}`}
+          >
+            <WeightsEditor
+              offering={weightsFor}
+              submitting={savingWeights}
+              serverError={weightsError}
+              onCancel={() => {
+                setWeightsFor(null);
+                setWeightsError(null);
+              }}
+              onSave={async (weights) => {
+                setSavingWeights(true);
+                setWeightsError(null);
+                try {
+                  await updateOffering(weightsFor.id, weights);
+                  setFeedback({
+                    variant: "success",
+                    title: "Weights updated",
+                    message: `${weightsFor.course_code} · ${weightsFor.section} now uses ${weights.mid_weight}/${weights.sessional_weight}/${weights.final_weight}/${weights.practical_weight}. Every grade on this offering has been recalculated.`,
+                  });
+                  setWeightsFor(null);
+                  void refresh();
+                } catch (error) {
+                  setWeightsError(
+                    errorMessage(error, "The server rejected the new weights."),
+                  );
+                } finally {
+                  setSavingWeights(false);
+                }
+              }}
+            />
+          </ComponentCard>
+        )}
+
         <ComponentCard
           title="Create an offering"
           desc="An offering is one section of a course in one semester, taught by one teacher. Assessment weights are set here and drive every final grade calculated for it."

@@ -67,6 +67,8 @@ export const API_ENDPOINTS = {
     BY_OFFERING: (offeringId: string) => `${root}/grades/offering/${offeringId}`,
     CALCULATION: (studentId: string, offeringId: string) =>
       `${root}/grades/student/${studentId}/offering/${offeringId}/calculation`,
+    // Admin only — the API 403s teachers on this one.
+    TRANSCRIPT: (studentId: string) => `${root}/grades/student/${studentId}/transcript`,
   },
   ATTENDANCE: {
     ROOT: `${root}/attendance`,
