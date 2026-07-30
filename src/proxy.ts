@@ -7,6 +7,9 @@ import { buildCsp, generateNonce } from "@/lib/csp";
 /**
  * Edge route gating and security headers.
  *
+ * Named `proxy` in the file `proxy.ts`: Next 16 renamed the `middleware`
+ * convention, which now emits a deprecation warning and is slated for removal.
+ *
  * Runs before any page renders, so an unauthenticated deep link redirects
  * without ever flashing protected chrome. It reads only the credential-free
  * session hint cookie (see `lib/session.ts`) — the API remains the real
@@ -28,7 +31,7 @@ const applySecurityHeaders = (response: NextResponse, csp: string): NextResponse
   return response;
 };
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const nonce = generateNonce();

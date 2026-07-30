@@ -33,10 +33,12 @@ export const loginUser = async (email: string, password: string): Promise<AuthUs
   }
 
   // Students authenticate successfully against the API but have no dashboard
-  // surface — reject before persisting anything so no session is created.
+  // surface. Reject BEFORE persisting anything: no tokens, no cached user and
+  // no session-hint cookie are ever written, so there is no session to destroy
+  // and no window in which middleware could see a student as signed in.
   if (!isDashboardRole(data.user.role)) {
     throw new Error(
-      "This account does not have access to the dashboard. Students should use the UniMate mobile app.",
+      "Access Denied: The web dashboard is for staff only. Please log in via the UniMate mobile app.",
     );
   }
 

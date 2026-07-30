@@ -227,19 +227,21 @@ const handleResponse = async (response: Response) => {
 
   if (response.ok) return payload;
 
+  // The API rate limits globally (100 req / 15 min per IP) and much harder on
+  // login (5 attempts / 15 min), so this is reachable in normal use and needs a
+  // human-readable message rather than a raw status code.
   if (response.status === 429) {
     const header = response.headers.get("Retry-After");
     const retryAfter = header ? Number(header) : undefined;
-    const wait =
-      retryAfter && Number.isFinite(retryAfter)
-        ? ` Try again in about ${Math.ceil(retryAfter / 60)} minute(s).`
-        : " Please wait a few minutes and try again.";
+    const hasWait = retryAfter !== undefined && Number.isFinite(retryAfter);
 
     throw new ApiError(
-      `Too many requests.${wait}`,
+      hasWait
+        ? `Rate limited. Please try again in about ${Math.ceil(retryAfter! / 60)} minute(s).`
+        : "Rate limited. Please try again shortly.",
       429,
       payload,
-      Number.isFinite(retryAfter as number) ? retryAfter : undefined,
+      hasWait ? retryAfter : undefined,
     );
   }
 

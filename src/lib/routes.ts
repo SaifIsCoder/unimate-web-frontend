@@ -20,12 +20,16 @@ export type RouteRule = {
 export const PUBLIC_PATHS = ["/signin"] as const;
 
 /**
- * Routes that exist in the tree but are deliberately unreachable.
+ * Paths that no longer exist in the tree.
  *
- * `/signup` is boilerplate: the API has no public registration endpoint —
- * accounts are provisioned by an admin via `POST /users` — so exposing a
- * self-registration form is misleading. The remaining entries are the unused
- * template pages, unlinked from navigation but still present on disk.
+ * The template pages and the boilerplate `/signup` form were deleted — the API
+ * has no public registration endpoint, since accounts are provisioned by an
+ * admin via `POST /users`. These entries remain only so a stale bookmark
+ * redirects somewhere useful instead of hitting a bare 404. Safe to drop once
+ * no one is likely to hold such a link.
+ *
+ * Note `/profile` is deliberately absent: it is now the live shared profile
+ * route (see ROUTE_RULES below).
  */
 export const RETIRED_PATHS = [
   "/signup",
@@ -42,14 +46,14 @@ export const RETIRED_PATHS = [
   "/form-elements",
   "/bar-chart",
   "/line-chart",
-  "/profile",
 ] as const;
 
 /** Longest prefix wins, so order here is irrelevant. */
 export const ROUTE_RULES: readonly RouteRule[] = [
   { prefix: "/admin", roles: ["admin"] },
   { prefix: "/teacher", roles: ["teacher"] },
-  { prefix: "/account", roles: ["admin", "teacher"] },
+  // Shared by every staff role — one page, role-aware content.
+  { prefix: "/profile", roles: ["admin", "teacher"] },
 ];
 
 const startsWithSegment = (pathname: string, prefix: string) =>

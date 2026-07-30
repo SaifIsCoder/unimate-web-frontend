@@ -105,7 +105,7 @@ const SECTIONS: NavSection[] = [
   {
     title: "Settings",
     items: [
-      { name: "Account", icon: <UserCircleIcon />, path: "/account", roles: ANY_STAFF },
+      { name: "Profile", icon: <UserCircleIcon />, path: "/profile", roles: ANY_STAFF },
     ],
   },
 ];

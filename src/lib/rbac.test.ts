@@ -24,7 +24,7 @@ describe("ruleFor — longest prefix wins", () => {
   it("maps workspace roots to their owning role", () => {
     expect(ruleFor("/admin")?.roles).toEqual(["admin"]);
     expect(ruleFor("/teacher")?.roles).toEqual(["teacher"]);
-    expect(ruleFor("/account")?.roles).toEqual(["admin", "teacher"]);
+    expect(ruleFor("/profile")?.roles).toEqual(["admin", "teacher"]);
   });
 
   it("applies a rule to nested paths", () => {
@@ -47,7 +47,14 @@ describe("ruleFor — longest prefix wins", () => {
 describe("retired and public paths", () => {
   it("flags every retired route, including nested children", () => {
     for (const path of RETIRED_PATHS) expect(isRetiredPath(path)).toBe(true);
-    expect(isRetiredPath("/profile/settings")).toBe(true);
+    expect(isRetiredPath("/calendar/2026")).toBe(true);
+  });
+
+  it("does NOT retire /profile — it is now the live shared profile route", () => {
+    // Guards the /account -> /profile move: if /profile crept back into
+    // RETIRED_PATHS, middleware would redirect the real page away.
+    expect(isRetiredPath("/profile")).toBe(false);
+    expect(ruleFor("/profile")).not.toBeNull();
   });
 
   it("retires /signup — the API has no public registration", () => {
@@ -55,7 +62,7 @@ describe("retired and public paths", () => {
   });
 
   it("does not retire live routes", () => {
-    for (const path of ["/admin", "/teacher", "/account", "/signin"]) {
+    for (const path of ["/admin", "/teacher", "/profile", "/signin"]) {
       expect(isRetiredPath(path)).toBe(false);
     }
   });
@@ -73,13 +80,13 @@ describe("the route access matrix", () => {
     [undefined, "/admin", "redirect"],
     [undefined, "/admin/users", "redirect"],
     [undefined, "/teacher", "redirect"],
-    [undefined, "/account", "redirect"],
+    [undefined, "/profile", "redirect"],
     [undefined, "/signin", "allow"],
 
-    // teacher — own workspace and shared account only
+    // teacher — own workspace and the shared profile only
     ["teacher", "/teacher", "allow"],
     ["teacher", "/teacher/classes/abc", "allow"],
-    ["teacher", "/account", "allow"],
+    ["teacher", "/profile", "allow"],
     ["teacher", "/admin", "redirect"],
     ["teacher", "/admin/users", "redirect"],
     ["teacher", "/signin", "redirect"],
@@ -87,19 +94,19 @@ describe("the route access matrix", () => {
     // admin — admin workspace, not the teacher one
     ["admin", "/admin", "allow"],
     ["admin", "/admin/courses", "allow"],
-    ["admin", "/account", "allow"],
+    ["admin", "/profile", "allow"],
     ["admin", "/teacher", "redirect"],
 
     // super_admin — inherits admin, still not a teacher
     ["super_admin", "/admin", "allow"],
     ["super_admin", "/admin/users", "allow"],
-    ["super_admin", "/account", "allow"],
+    ["super_admin", "/profile", "allow"],
     ["super_admin", "/teacher", "redirect"],
 
     // student — has no dashboard surface at all
     ["student", "/admin", "redirect"],
     ["student", "/teacher", "redirect"],
-    ["student", "/account", "redirect"],
+    ["student", "/profile", "redirect"],
   ];
 
   it.each(matrix)("%s visiting %s -> %s", (role, path, expected) => {
@@ -119,7 +126,7 @@ describe("navigation reflects the same permissions", () => {
   it("shows a teacher only their own routes", () => {
     const links = linksFor("teacher");
     expect(links).toContain("/teacher");
-    expect(links).toContain("/account");
+    expect(links).toContain("/profile");
     expect(links.some((path) => path.startsWith("/admin"))).toBe(false);
   });
 

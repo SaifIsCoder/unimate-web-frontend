@@ -32,7 +32,7 @@ function Field({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
-export default function AccountPage() {
+export default function ProfilePage() {
   const { user } = useAuth();
   const [profile, setProfile] = useState<MeProfile | null>(null);
   const [adminRecord, setAdminRecord] = useState<AdminRecord | null>(null);
@@ -71,9 +71,46 @@ export default function AccountPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-gray-800 dark:text-white/90">Account</h1>
+        <h1 className="text-2xl font-semibold text-gray-800 dark:text-white/90">Profile</h1>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
           Your identity as the UniMate API sees it.
+        </p>
+      </div>
+
+      {/*
+        This page is read-only by necessity, not by choice — the API has no
+        endpoint that can back an edit form (BE-6 in
+        dashboard_architecture_plan.md):
+          - /auth/reset-password and /auth/set-password reject admins outright
+            (403) and, for teachers, work exactly once — `password_changed`
+            locks them out afterwards.
+          - PATCH /teachers/:id is admin-only, so there is no self-service
+            profile update for the person actually viewing this page.
+        Saying so plainly beats rendering inputs that would fail on submit.
+      */}
+      <div
+        role="note"
+        className="flex gap-3 rounded-xl border border-blue-light-300 bg-blue-light-50 px-4 py-3 dark:border-blue-light-800 dark:bg-blue-light-500/10"
+      >
+        <svg
+          className="mt-0.5 shrink-0 text-blue-light-500"
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          aria-hidden="true"
+        >
+          <path
+            d="M12 16v-4m0-4h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+        <p className="text-sm text-blue-light-700 dark:text-blue-light-400">
+          To update your profile details or reset your password, please contact a
+          system administrator.
         </p>
       </div>
 

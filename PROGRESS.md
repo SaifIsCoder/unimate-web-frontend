@@ -12,6 +12,7 @@ Phase 1 changed no endpoint coverage — it was foundation work.
 | 0 | Auth, RBAC route groups, admin CRUD, teacher class workspace | ✅ Complete (pre-existing) |
 | **1** | **Harden the foundation** | **✅ Complete — 2026-07-29** |
 | **1.1** | **Cleanup pass — boilerplate, CSP, error boundaries, tests** | **✅ Complete — 2026-07-29** |
+| **1.2** | **Phase 1 close-out — boilerplate deleted, /profile, deps pruned** | **✅ Complete — 2026-07-29** |
 | 2 | Complete admin foundations (Departments, Student Directory, Faculty Roster, Admin Directory) | ⬜ Not started |
 | 3 | Master Timetable (schedules + exceptions) | ⬜ Not started |
 | 4 | Assignments & Tasks (11 endpoints) | ⬜ Not started |
@@ -152,7 +153,7 @@ confirmed present on the response.
 ### Files
 
 ```
-added     src/middleware.ts
+added     src/proxy.ts               (renamed from middleware.ts in 1.2)
 added     src/lib/session.ts          session hint + role helpers
 added     src/lib/routes.ts           route access table
 added     src/lib/navigation.tsx      role-filtered nav config
@@ -285,3 +286,92 @@ one, nonce differs per request, all 6 security headers present, `<title>` render
   in `GET /auth/me`. The Account page sidesteps it by preferring
   `GET /admins/me`, but the endpoint is still wrong for any other consumer.
 - 3 pre-existing lint errors remain in untouched boilerplate.
+
+---
+
+## Phase 1.2 — Phase 1 Close-Out ✅
+
+The final four objectives for "Harden the Foundation".
+
+### 1. Student logins rejected
+
+Already enforced in `authService.loginUser`; the message is now the agreed copy.
+Worth noting the mechanism: the check runs **before anything is persisted**, so no
+tokens, no cached user and no session-hint cookie are ever written. There is no
+session to destroy and no window in which the edge could see a student as signed
+in.
+
+> Access Denied: The web dashboard is for staff only. Please log in via the UniMate mobile app.
+
+### 2. API error interceptors
+
+Landed in Phase 1; the 429 copy is now the agreed wording. Current behaviour in
+`services/apiClient.ts`:
+
+- **Envelope extraction** — reads `{ success: false, error: { message } }`,
+  falling back to a generic message for 5xx and to a transport message when no
+  response arrived at all.
+- **401** — single-flight refresh against `POST /auth/refresh` (concurrent 401s
+  must not race and invalidate each other's rotated token), then one retry. If
+  refresh fails, tokens and the session cookie are cleared and `AuthContext`
+  redirects to `/signin`. A refresh that fails on a *network* error keeps the
+  session rather than signing the user out on a blip.
+- **429** — "Rate limited. Please try again shortly.", upgraded to a concrete
+  wait when the server sends `Retry-After`.
+- Auth endpoints are excluded from the retry loop; all requests time out at 20s.
+
+### 3. Profile page
+
+Moved `/account` → **`/profile`**, now that deleting the boilerplate freed the
+path. One shared route for all three staff roles, rendering role-aware fields
+from `GET /auth/me` plus `GET /admins/me` for admins.
+
+Strictly read-only, with the informational banner at the top. This is a
+constraint, not a preference — see **BE-6**: `/auth/reset-password` and
+`/auth/set-password` reject admins outright and work exactly once for teachers,
+and `PATCH /teachers/:id` is admin-only. There is no endpoint a self-service edit
+form could call.
+
+### 4. Boilerplate deleted
+
+**49 files across 10 directories**, all recoverable from git history.
+
+| Removed | Detail |
+| :--- | :--- |
+| `(ui-elements)` + `(others-pages)` | 14 template routes |
+| Orphaned components | ecommerce, example, videos, charts, calendar, user-profile, tables |
+| `components/form/form-elements` | 10 demo components |
+| `/signup` + `SignUpForm` | no API endpoint exists behind it |
+
+**Routes: 29 → 14. Production dependencies: 21 → 8.** Removed `@fullcalendar/*`
+(6 packages), `@react-jvectormap/*` (2), `apexcharts`, `react-apexcharts`,
+`react-dropzone`, and the now-obsolete jvectormap React-19 overrides. Kept
+`flatpickr` and `components/form/date-picker.tsx` — Phases 3–5 need date inputs.
+
+Config files updated: **`lib/routes.ts`** (`/profile` out of `RETIRED_PATHS`, into
+`ROUTE_RULES`) and **`lib/navigation.tsx`** — the sidebar's single source of truth,
+where "Account" became "Profile". `RETIRED_PATHS` still redirects the deleted URLs
+so stale bookmarks land somewhere useful rather than a bare 404.
+
+### Bonus: middleware → proxy
+
+The Next 16.2 upgrade began warning that the `middleware` file convention is
+deprecated. Renamed `src/middleware.ts` → `src/proxy.ts` with the export renamed
+to `proxy`, then re-verified the full access matrix — this file *is* the access
+control, so a silent break would be serious.
+
+### Verified
+
+`typecheck` clean · 90/90 tests · `next build` clean (14 routes, deprecation
+warning gone) · runtime against a production server: deleted routes redirect,
+`/profile` allows teacher + admin and rejects anonymous/student, workspace gating
+holds, CSP nonce matches with 0 scripts missing one, 6/6 security headers.
+
+### Known
+
+- **`npm run lint` now reports 13 errors**, all `react-hooks/set-state-in-effect`,
+  newly enforced by the `eslint-config-next` 16.0.7 → 16.2.12 upgrade. It is the
+  same fetch-on-mount pattern in 11 files. Not bugs, but they will fail a CI lint
+  gate until the data-fetching pattern is reworked — worth folding into Phase 2.
+- `/account` now 404s. It existed only within this session, so no real bookmarks.
+- 15 dev-only npm advisories remain (eslint toolchain). Production: **0**.

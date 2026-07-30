@@ -5,9 +5,9 @@ import type { Metadata } from "next";
 // Client components ("use client") cannot export metadata, so pages that need a
 // title get a thin server layout like this one.
 export const metadata: Metadata = {
-  title: "Account",
+  title: "Profile",
 };
 
-export default function AccountLayout({ children }: { children: React.ReactNode }) {
+export default function ProfileLayout({ children }: { children: React.ReactNode }) {
   return children;
 }
