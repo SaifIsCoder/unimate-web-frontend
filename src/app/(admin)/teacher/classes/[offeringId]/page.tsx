@@ -8,13 +8,14 @@ import Badge from "@/components/ui/badge/Badge";
 import { errorMessage } from "@/components/admin/FeedbackBanner";
 import RosterPanel from "@/components/teacher/RosterPanel";
 import AttendancePanel from "@/components/teacher/AttendancePanel";
+import AssignmentsPanel from "@/components/teacher/AssignmentsPanel";
 import GradesPanel from "@/components/teacher/GradesPanel";
 import ClassAnnouncementPanel from "@/components/teacher/ClassAnnouncementPanel";
 import { listEnrollmentsByOffering } from "@/services/enrollmentService";
 import { listMyOfferings } from "@/services/teachingService";
 import type { Enrollment, TeachingOffering } from "@/types/academics";
 
-const TABS = ["Roster", "Attendance", "Grades", "Announce"] as const;
+const TABS = ["Roster", "Attendance", "Assignments", "Grades", "Announce"] as const;
 type Tab = (typeof TABS)[number];
 
 export default function ClassDetailPage() {
@@ -35,26 +36,35 @@ export default function ClassDetailPage() {
       .finally(() => setLoadingOfferings(false));
   }, []);
 
-  const loadRoster = useCallback(async () => {
-    if (!offeringId) return;
-    setRosterLoading(true);
-    try {
-      const page = await listEnrollmentsByOffering(offeringId);
-      setRoster(page.data);
-      setRosterError(null);
-    } catch (error) {
-      setRoster([]);
-      setRosterError(
-        errorMessage(error, "Could not load the roster for this class."),
-      );
-    } finally {
-      setRosterLoading(false);
-    }
-  }, [offeringId]);
-
+  // Async closure keeps setState off the synchronous effect path; `alive`
+  // guards against a stale roster landing after the teacher switches class.
   useEffect(() => {
-    void loadRoster();
-  }, [loadRoster]);
+    if (!offeringId) return;
+
+    let alive = true;
+
+    void (async () => {
+      try {
+        const page = await listEnrollmentsByOffering(offeringId);
+        if (!alive) return;
+        setRoster(page.data);
+        setRosterError(null);
+      } catch (error) {
+        if (alive) {
+          setRoster([]);
+          setRosterError(
+            errorMessage(error, "Could not load the roster for this class."),
+          );
+        }
+      } finally {
+        if (alive) setRosterLoading(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [offeringId]);
 
   const offering = useMemo(
     () => offerings.find((entry) => entry.id === offeringId) ?? null,
@@ -143,6 +153,8 @@ export default function ClassDetailPage() {
           rosterLoading={rosterLoading}
         />
       )}
+
+      {tab === "Assignments" && offering && <AssignmentsPanel offering={offering} />}
 
       {tab === "Grades" && offering && (
         <GradesPanel offering={offering} roster={roster} rosterLoading={rosterLoading} />

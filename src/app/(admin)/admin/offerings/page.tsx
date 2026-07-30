@@ -79,15 +79,38 @@ export default function OfferingsPage() {
     }
   }, []);
 
+  // Async closure keeps setState off the synchronous effect path; `alive`
+  // guards against a response landing after unmount.
   useEffect(() => {
-    listCourses()
-      .then(setCourses)
-      .catch(() => setCourses([]));
-    listTeachers()
-      .then(setTeachers)
-      .catch(() => setTeachers([]));
-    void refresh();
-  }, [refresh]);
+    let alive = true;
+
+    void (async () => {
+      // Courses and teachers only populate pickers, so they degrade to empty.
+      const [courseResult, teacherResult, offeringResult] = await Promise.allSettled([
+        listCourses(),
+        listTeachers(),
+        listOfferings(),
+      ]);
+
+      if (!alive) return;
+
+      setCourses(courseResult.status === "fulfilled" ? courseResult.value : []);
+      setTeachers(teacherResult.status === "fulfilled" ? teacherResult.value : []);
+
+      if (offeringResult.status === "fulfilled") {
+        setOfferings(offeringResult.value);
+        setListError(null);
+      } else {
+        setListError(errorMessage(offeringResult.reason, "Could not load offerings."));
+      }
+
+      setLoading(false);
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const selectedCourse = useMemo(
     () => courses.find((course) => course.id === form.course_id) ?? null,

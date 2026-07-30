@@ -51,7 +51,7 @@ Joi with `stripUnknown: true`, `allowUnknown: false`, `convert: true`. Unknown k
 
 ## 2. Current Implementation Status
 
-The dashboard is well past boilerplate. **72 of 134 endpoints (54%) are reachable** from `src/config/api.ts` as of Phase 3.
+The dashboard is well past boilerplate. **79 of 134 endpoints (59%) are reachable** from `src/config/api.ts` as of Phase 4.
 
 ### Built and working
 
@@ -328,7 +328,7 @@ Auth + session, RBAC route groups, user provisioning, courses, offerings, enroll
 
 ---
 
-### Phase 4 — Assignments & Tasks
+### Phase 4 — Assignments & Tasks ✅ *(delivered 2026-07-30)*
 **Depends on:** Phase 2. **Highest-value remaining gap — 0 of 11 endpoints wired, and a hard prerequisite for Phase 5.**
 
 - Teacher CRUD — `POST /assignments`, `GET /assignments`, `PATCH /assignments/:id`, `DELETE /assignments/:id`.

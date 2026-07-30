@@ -4,8 +4,10 @@ Running record of the phased build described in `dashboard_architecture_plan.md`
 Updated at the end of every phase. Each entry states what shipped, how it was
 verified, and what was deliberately left out.
 
-**Backend surface reachable from the dashboard: 72 / 134 endpoints (54%).**
-Phases 1 and 1.x were foundation work; Phase 2 added 15 endpoints, Phase 3 added 6.
+**Backend surface reachable from the dashboard: 79 / 134 endpoints (59%).**
+Phases 1 and 1.x were foundation work; Phase 2 added 15, Phase 3 added 6, Phase 4 added 7.
+
+**Lint: 0 errors, 0 warnings** as of Phase 4.
 
 | Phase | Scope | Status |
 | :--- | :--- | :--- |
@@ -15,7 +17,7 @@ Phases 1 and 1.x were foundation work; Phase 2 added 15 endpoints, Phase 3 added
 | **1.2** | **Phase 1 close-out — boilerplate deleted, /profile, deps pruned** | **✅ Complete — 2026-07-29** |
 | **2** | **Complete admin foundations (Departments, Student Directory, Faculty Roster, Admin Directory)** | **✅ Complete — 2026-07-30** |
 | **3** | **Master Timetable (schedules + exceptions)** | **✅ Complete — 2026-07-30** |
-| 4 | Assignments & Tasks (11 endpoints) | ⬜ Not started |
+| **4** | **Assignments & Tasks** | **✅ Complete — 2026-07-30** |
 | 5 | Complete the gradebook (transcripts, weights, attendance reporting) | ⬜ Not started |
 | 6 | Communications & community (needs BE-1 for moderation) | ⬜ Blocked in part |
 | 7 | Analytics & polish (needs BE-4, BE-5) | ⬜ Blocked |
@@ -571,3 +573,109 @@ on every Phase 3 file · build clean, 20 routes · runtime gating on
   and "Lab-3" read as different rooms. A rooms entity would fix it properly.
 - The grid shows the recurring week, not a specific calendar week. Exceptions are
   listed by date under their slot; a date-ranged view is a Phase 7 polish item.
+
+---
+
+## Phase 4 — Assignments & Tasks ✅
+
+The gradebook's hard prerequisite. **Backend coverage: 72 → 79 of 134 endpoints
+(54% → 59%).** Assignments go 0/11 → 7/11 (the remaining 4 are student-only).
+
+### 0. Lint is now 100% clean
+
+`npm run lint` → **0 errors, 0 warnings**, down from 12 errors in 10 files.
+
+Most took the established async-closure + `alive` pattern. Three needed
+something different, because the rule was pointing at a real design problem
+rather than a style nit:
+
+- **`ThemeContext`** read `localStorage` in a mount effect and mirrored it into
+  state. The obvious fix — a lazy `useState` initialiser — would have been
+  *wrong*: the server has no `localStorage`, so it would render "light" while
+  the client rendered the saved theme, producing a hydration mismatch. Rewritten
+  with **`useSyncExternalStore`**, whose `getServerSnapshot` exists for exactly
+  this. Also removed the `isInitialized` flag and now syncs across tabs via the
+  `storage` event.
+- **`AttendancePanel`** seeded every roster row into `marks` from an effect. That
+  was redundant as well as a cascading render: every read already does
+  `marks[id] ?? "present"`, so the map only ever needed the teacher's
+  *overrides*. Deleted the effect outright.
+- **`AttendancePanel` prefill** and the timetable page both derive their loading
+  flag from "which id has settled" rather than setting it at the top of an
+  effect.
+
+`coverage/**` is now eslint-ignored — it is generated reporter output, not our
+code.
+
+### 1. `services/assignmentService.ts` — 7 endpoints
+
+The response shapes are **not uniform**, so they are typed separately rather
+than papered over:
+
+| Endpoint | Returns |
+| :--- | :--- |
+| `GET /assignments/offering/:id` | raw row (`Assignment`) |
+| `GET /assignments` | raw row + course join + pagination (`AssignmentListRow`) |
+| `GET /assignments/:id` | **reshaped** for mobile (`AssignmentDetail`) |
+
+That last one is the trap: it returns `instructions` not `description`, `due`
+not `due_date`, `maxMarks` not `total_points`, and drops `offering_id`,
+`is_done` and `assessment_type` entirely. The list row therefore stays the
+source of truth for the workspace.
+
+### 2. The assignment `id` is the Phase 5 join key
+
+`POST /grades` requires `reference_id` for every assignment-backed assessment
+type and 404s without a real assignment behind it; the server then overwrites
+the grade's `title` and `max_score` from that assignment. So the id is surfaced
+directly in the list as a **click-to-copy chip**, documented on the `Assignment`
+type, and called out in the service module header.
+
+### 3. UI — the Assignments tab
+
+Placed **before** Grades in the tab order, mirroring the workflow: a grade for an
+assignment type cannot exist until its assignment does.
+
+List with type/done/overdue badges, create and edit forms, mark-done and delete.
+
+**FCM notice.** Creating an assignment pushes a notification to every enrolled
+student as a side effect — there is no draft state and no way to suppress it.
+The create form says so prominently before the publish button.
+
+### 4. Inline error handling
+
+| Rejection | Handling |
+| :--- | :--- |
+| **400** past due date | Blocked client-side before submit; the server's message still renders inline if the two disagree |
+| **409** duplicate title + description | Previewed locally against the loaded list, which also disables the submit button |
+
+The duplicate check mirrors the server exactly: it matches on title **and**
+description *together*, and the SQL uses `COALESCE(description,'')`, so null and
+empty string collide — replicated with `?? ""`.
+
+One subtlety worth keeping: when editing, the past-date rule is skipped if the
+teacher did not touch the due date, and the payload omits the field. Otherwise
+editing an already-overdue assignment would be permanently blocked on a value
+they never changed.
+
+Two API behaviours surfaced honestly in confirmations:
+- **Mark done is one-way.** The handler hardcodes `is_done: true` and the update
+  schema does not accept the field, so nothing can reopen an assignment.
+- **Delete may be refused** once grades reference the assignment — the dialog
+  suggests marking it done instead.
+
+### Verified
+
+`npm run lint` **0/0** · typecheck clean · **176 tests** (26 new) · build clean,
+20 routes · runtime gating on the class workspace unchanged (anon 307,
+teacher 200, admin 307).
+
+### Known limitations
+
+- `difficulty` and `priority` have DB defaults but appear in neither the create
+  nor update schema, so they are read-only from this client and not shown as
+  editable fields.
+- No draft state — creation always notifies.
+- `GET /assignments/:id` is unused by the workspace, since the list row carries
+  strictly more of what the teacher needs. It is wired and typed for when a
+  dedicated detail route wants it.

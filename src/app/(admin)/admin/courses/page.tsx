@@ -59,12 +59,38 @@ export default function CoursesPage() {
     }
   }, []);
 
+  // Async closure keeps setState off the synchronous effect path
+  // (react-hooks/set-state-in-effect), and `alive` stops a slow response
+  // writing to an unmounted page.
   useEffect(() => {
-    listDepartments()
-      .then(setDepartments)
-      .catch(() => setDepartments([]));
-    void refresh();
-  }, [refresh]);
+    let alive = true;
+
+    void (async () => {
+      // Departments only populate a picker, so a failure degrades to an empty
+      // list rather than blocking the course table.
+      const [departmentResult, courseResult] = await Promise.allSettled([
+        listDepartments(),
+        listCourses(),
+      ]);
+
+      if (!alive) return;
+
+      setDepartments(departmentResult.status === "fulfilled" ? departmentResult.value : []);
+
+      if (courseResult.status === "fulfilled") {
+        setCourses(courseResult.value);
+        setListError(null);
+      } else {
+        setListError(errorMessage(courseResult.reason, "Could not load courses."));
+      }
+
+      setLoading(false);
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const setField = <K extends keyof CourseForm>(key: K, value: CourseForm[K]) => {
     setForm((previous) => ({ ...previous, [key]: value }));

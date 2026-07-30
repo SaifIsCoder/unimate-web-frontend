@@ -64,12 +64,37 @@ export default function UserProvisioningPage() {
     }
   }, []);
 
+  // Async closure keeps setState off the synchronous effect path; `alive`
+  // guards against a response landing after unmount.
   useEffect(() => {
-    listDepartments()
-      .then(setDepartments)
-      .catch(() => setDepartments([]));
-    void refreshUsers();
-  }, [refreshUsers]);
+    let alive = true;
+
+    void (async () => {
+      // Departments only feed a picker — an empty list is a survivable
+      // degradation, a missing user table is not.
+      const [departmentResult, userResult] = await Promise.allSettled([
+        listDepartments(),
+        listUsers(),
+      ]);
+
+      if (!alive) return;
+
+      setDepartments(departmentResult.status === "fulfilled" ? departmentResult.value : []);
+
+      if (userResult.status === "fulfilled") {
+        setUsers(userResult.value);
+        setListError(null);
+      } else {
+        setListError(errorMessage(userResult.reason, "Could not load accounts."));
+      }
+
+      setLoadingList(false);
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const setField = <K extends keyof CreateUserForm>(key: K, value: CreateUserForm[K]) => {
     setForm((previous) => ({ ...previous, [key]: value }));

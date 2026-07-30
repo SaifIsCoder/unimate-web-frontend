@@ -398,3 +398,71 @@ export type OfferingException = {
   new_room: string | null;
   created_at?: string;
 };
+
+// ── Phase 4: assignments ─────────────────────────────────────────────────────
+
+export const ASSIGNMENT_TYPES = [
+  "assignment",
+  "quiz",
+  "presentation",
+  "project",
+] as const;
+
+export type AssignmentType = (typeof ASSIGNMENT_TYPES)[number];
+
+/**
+ * An assignment row as returned by the LIST endpoints
+ * (`GET /assignments` and `GET /assignments/offering/:offeringId`).
+ *
+ * `id` is the value Phase 5 must pass to `POST /grades` as `reference_id` —
+ * assignment-backed grades are rejected without it, and the server overwrites
+ * the grade's title and max score from the referenced assignment.
+ *
+ * `total_points` is a Decimal column and therefore arrives as a **string**.
+ * `difficulty` and `priority` have DB defaults but are absent from both the
+ * create and update schemas, so they are read-only from this client.
+ */
+export type Assignment = {
+  id: string;
+  offering_id: string;
+  title: string;
+  description: string | null;
+  assessment_type: AssignmentType;
+  due_date: string;
+  total_points: string;
+  is_done: boolean;
+  difficulty: string | null;
+  priority: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+/** `GET /assignments` additionally joins the offering and course. */
+export type AssignmentListRow = Assignment & {
+  course_code: string;
+  course_title: string;
+  semester: string;
+  section: string;
+};
+
+/**
+ * `GET /assignments/:id` — NOT the raw row.
+ *
+ * The service reshapes it for the mobile client, so field names differ from the
+ * list endpoints: `instructions` not `description`, `due` not `due_date`,
+ * `maxMarks` not `total_points`. There is no `offering_id`, `is_done` or
+ * `assessment_type` here at all, which is why the list row remains the source
+ * of truth for the workspace and this is only used for a detail read.
+ */
+export type AssignmentDetail = {
+  id: string;
+  title: string;
+  instructions: string;
+  due: string;
+  maxMarks: number;
+  difficulty: string | null;
+  priority: string | null;
+  attachments: unknown[];
+  teacherRemarks: string;
+  submissionAllowed: boolean;
+};

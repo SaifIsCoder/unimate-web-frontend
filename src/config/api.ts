@@ -56,6 +56,12 @@ export const API_ENDPOINTS = {
     EXCEPTIONS_BY_OFFERING: (offeringId: string) =>
       `${root}/schedules/offering/${offeringId}/exceptions`,
   },
+  ASSIGNMENTS: {
+    ROOT: `${root}/assignments`,
+    BY_ID: (id: string) => `${root}/assignments/${id}`,
+    BY_OFFERING: (offeringId: string) => `${root}/assignments/offering/${offeringId}`,
+    DONE: (id: string) => `${root}/assignments/${id}/done`,
+  },
   GRADES: {
     ROOT: `${root}/grades`,
     BY_OFFERING: (offeringId: string) => `${root}/grades/offering/${offeringId}`,

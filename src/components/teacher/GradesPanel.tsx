@@ -69,9 +69,29 @@ export default function GradesPanel({ offering, roster, rosterLoading }: GradesP
     }
   }, [offering.id]);
 
+  // Async closure keeps setState off the synchronous effect path; `alive`
+  // guards against a response landing after the teacher switches class.
   useEffect(() => {
-    void refreshGrades();
-  }, [refreshGrades]);
+    let alive = true;
+
+    void (async () => {
+      try {
+        const page = await listGradesByOffering(offering.id);
+        if (alive) {
+          setGrades(page.data);
+          setGradesError(null);
+        }
+      } catch (error) {
+        if (alive) setGradesError(errorMessage(error, "Could not load the gradebook."));
+      } finally {
+        if (alive) setLoadingGrades(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [offering.id]);
 
   // Reference-backed types take their title and max score from a linked
   // assignment, which lives in the assignments module rather than here.

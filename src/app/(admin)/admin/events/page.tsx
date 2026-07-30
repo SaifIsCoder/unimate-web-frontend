@@ -68,9 +68,29 @@ export default function EventsPage() {
     }
   }, []);
 
+  // Async closure keeps setState off the synchronous effect path; `alive`
+  // guards against a response landing after unmount.
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    let alive = true;
+
+    void (async () => {
+      try {
+        const page = await listEvents();
+        if (alive) {
+          setEvents(page.data);
+          setListError(null);
+        }
+      } catch (error) {
+        if (alive) setListError(errorMessage(error, "Could not load events."));
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const setField = <K extends keyof EventForm>(key: K, value: EventForm[K]) => {
     setForm((previous) => ({ ...previous, [key]: value }));

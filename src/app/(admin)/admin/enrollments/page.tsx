@@ -69,9 +69,35 @@ export default function EnrollmentsPage() {
     }
   }, []);
 
+  // Async closure keeps setState off the synchronous effect path; `alive`
+  // guards against a stale roster overwriting a newer one when the admin
+  // switches offering quickly.
   useEffect(() => {
-    void loadRoster(offeringId);
-  }, [offeringId, loadRoster]);
+    if (!offeringId) return;
+
+    let alive = true;
+
+    void (async () => {
+      try {
+        const page = await listEnrollmentsByOffering(offeringId);
+        if (!alive) return;
+        setRoster(page.data);
+        setTotal(page.meta.total);
+        setRosterError(null);
+      } catch (error) {
+        if (alive) {
+          setRoster([]);
+          setRosterError(errorMessage(error, "Could not load the roster."));
+        }
+      } finally {
+        if (alive) setLoadingRoster(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [offeringId]);
 
   const activeCount = useMemo(
     () => roster.filter((row) => row.status === "enrolled").length,

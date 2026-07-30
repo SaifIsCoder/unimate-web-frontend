@@ -77,23 +77,52 @@ export default function AnnouncementsPage() {
     }
   }, []);
 
+  // Async closure keeps setState off the synchronous effect path; `alive`
+  // guards against a response landing after unmount.
   useEffect(() => {
-    listDepartments()
-      .then(setDepartments)
-      .catch(() => setDepartments([]));
-    listOfferings()
-      .then(setOfferings)
-      .catch(() => setOfferings([]));
-    // The server only accepts the admin's OWN department as a target, so the
-    // picker is seeded from this rather than from the full department list.
-    getMyAdminProfile()
-      .then((loaded) => {
-        setProfile(loaded);
-        if (loaded.department_id !== null) setDepartmentId(loaded.department_id);
-      })
-      .catch(() => setProfile(null));
-    void refresh();
-  }, [refresh]);
+    let alive = true;
+
+    void (async () => {
+      // All four are independent: the pickers degrade to empty, only the
+      // announcement list surfaces an error.
+      const [departmentResult, offeringResult, profileResult, listResult] =
+        await Promise.allSettled([
+          listDepartments(),
+          listOfferings(),
+          getMyAdminProfile(),
+          listAnnouncements(),
+        ]);
+
+      if (!alive) return;
+
+      setDepartments(departmentResult.status === "fulfilled" ? departmentResult.value : []);
+      setOfferings(offeringResult.status === "fulfilled" ? offeringResult.value : []);
+
+      // The server only accepts the admin's OWN department as a target, so the
+      // picker is seeded from this rather than from the full department list.
+      if (profileResult.status === "fulfilled") {
+        setProfile(profileResult.value);
+        if (profileResult.value.department_id !== null) {
+          setDepartmentId(profileResult.value.department_id);
+        }
+      } else {
+        setProfile(null);
+      }
+
+      if (listResult.status === "fulfilled") {
+        setAnnouncements(listResult.value.data);
+        setListError(null);
+      } else {
+        setListError(errorMessage(listResult.reason, "Could not load announcements."));
+      }
+
+      setLoading(false);
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const semesters = useMemo(
     () => Array.from(new Set(offerings.map((offering) => offering.semester))).sort(),

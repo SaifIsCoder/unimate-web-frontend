@@ -52,7 +52,8 @@ export default function AttendancePanel({
   const [stats, setStats] = useState<AttendanceStat[]>([]);
   const [statsError, setStatsError] = useState<string | null>(null);
   const [loadingStats, setLoadingStats] = useState(true);
-  const [prefilling, setPrefilling] = useState(false);
+  /** Id of the session whose existing marks have been merged in, if any. */
+  const [prefilledFor, setPrefilledFor] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
 
@@ -83,36 +84,70 @@ export default function AttendancePanel({
     }
   }, [offeringId]);
 
+  // Async closure keeps setState off the synchronous effect path; `alive`
+  // guards against a response landing after the teacher switches class.
   useEffect(() => {
-    void refreshSessions();
-    void refreshStats();
-  }, [refreshSessions, refreshStats]);
+    let alive = true;
 
-  // Everyone starts present — the same default the server applies — so the
-  // teacher only has to touch the exceptions.
-  useEffect(() => {
-    setMarks(
-      Object.fromEntries(
-        activeRoster.map((row) => [row.student_id, "present" as AttendanceStatus]),
-      ),
-    );
-  }, [activeRoster]);
+    void (async () => {
+      const [sessionResult, statsResult] = await Promise.allSettled([
+        listSessions(offeringId),
+        getAttendanceStats(offeringId),
+      ]);
+
+      if (!alive) return;
+
+      setSessions(sessionResult.status === "fulfilled" ? sessionResult.value : []);
+
+      if (statsResult.status === "fulfilled") {
+        setStats(statsResult.value.data);
+        setStatsError(null);
+      } else {
+        setStatsError(errorMessage(statsResult.reason, "Could not load attendance stats."));
+      }
+
+      setLoadingStats(false);
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [offeringId]);
+
+  /**
+   * `marks` deliberately holds only the teacher's *overrides*.
+   *
+   * Everyone defaults to present — the same default the server applies — and
+   * every read does `marks[id] ?? "present"`. Seeding the whole roster into
+   * state from an effect (as this previously did) was both a cascading render
+   * and redundant: the fallback already covers students the map has never seen,
+   * including any who arrive after the first render.
+   */
 
   const sessionForDate = useMemo(
     () => sessions.find((session) => session.date?.slice(0, 10) === date) ?? null,
     [sessions, date],
   );
 
-  /** Load an existing session's marks so re-submitting doesn't wipe earlier work. */
+  /**
+   * Load an existing session's marks so re-submitting doesn't wipe earlier work.
+   *
+   * `prefilling` is derived from which session has been resolved rather than
+   * set at the top of the effect, which would be a cascading render. As with
+   * the timetable page, comparing "requested" against "settled" gives the same
+   * answer with one less render and cannot desynchronise.
+   */
   useEffect(() => {
     if (!sessionForDate || activeRoster.length === 0) return;
 
     let cancelled = false;
-    setPrefilling(true);
+    const sessionId = sessionForDate.id;
 
-    getSessionRecords(sessionForDate.id)
-      .then((records) => {
+    void (async () => {
+      try {
+        const records = await getSessionRecords(sessionId);
         if (cancelled) return;
+
         // Records key off enrollment_id; map back to student_id via the roster.
         const byEnrollment = new Map(
           activeRoster.map((row) => [String(row.id), row.student_id]),
@@ -125,9 +160,12 @@ export default function AttendancePanel({
           }
           return next;
         });
-      })
-      .catch(() => undefined)
-      .finally(() => !cancelled && setPrefilling(false));
+      } catch {
+        // A session with no records yet is normal — keep the present defaults.
+      } finally {
+        if (!cancelled) setPrefilledFor(sessionId);
+      }
+    })();
 
     return () => {
       cancelled = true;
@@ -271,7 +309,7 @@ export default function AttendancePanel({
           ))}
         </div>
 
-        {prefilling && (
+        {sessionForDate && prefilledFor !== sessionForDate.id && (
           <p className="text-xs text-gray-500 dark:text-gray-400">
             Loading previously saved marks for this date…
           </p>
