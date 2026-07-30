@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import ComponentCard from "@/components/common/ComponentCard";
 import FeedbackBanner, { errorMessage, type Feedback } from "@/components/admin/FeedbackBanner";
 import { useAuth } from "@/context/AuthContext";
@@ -41,32 +41,41 @@ export default function ProfilePage() {
 
   const isAdminRole = user?.role === "admin" || user?.role === "super_admin";
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      // The admin record is optional context, so it is fetched alongside rather
-      // than gating the page — getMyAdminRecord already swallows its own errors.
-      const [me, record] = await Promise.all([
-        getMyProfile(),
-        isAdminRole ? getMyAdminRecord() : Promise.resolve(null),
-      ]);
-      setProfile(me);
-      setAdminRecord(record);
-      setFeedback(null);
-    } catch (error) {
-      setFeedback({
-        variant: "error",
-        title: "Could not load your account",
-        message: errorMessage(error, "Please try again in a moment."),
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [isAdminRole]);
-
+  // Async closure keeps setState off the synchronous effect path; `alive` stops
+  // a late response writing to an unmounted page.
   useEffect(() => {
-    void load();
-  }, [load]);
+    let alive = true;
+
+    void (async () => {
+      try {
+        // The admin record is optional context, so it is fetched alongside rather
+        // than gating the page — getMyAdminRecord already swallows its own errors.
+        const [me, record] = await Promise.all([
+          getMyProfile(),
+          isAdminRole ? getMyAdminRecord() : Promise.resolve(null),
+        ]);
+
+        if (!alive) return;
+        setProfile(me);
+        setAdminRecord(record);
+        setFeedback(null);
+      } catch (error) {
+        if (alive) {
+          setFeedback({
+            variant: "error",
+            title: "Could not load your account",
+            message: errorMessage(error, "Please try again in a moment."),
+          });
+        }
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [isAdminRole]);
 
   return (
     <div className="space-y-6">

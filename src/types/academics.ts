@@ -253,3 +253,89 @@ export const WEIGHT_LABELS: Record<AssessmentWeightField, string> = {
   final_weight: "Final exam",
   practical_weight: "Practical",
 };
+
+// ── Phase 2: people directories ──────────────────────────────────────────────
+
+/**
+ * A student as returned by `GET /students/:id`, which joins the user and
+ * department rows on top of the base profile.
+ */
+export type StudentDetail = Student & {
+  role?: string;
+  department_code: string | null;
+  phone: string | null;
+  address: string | null;
+  father_name: string | null;
+  guardian_phone: string | null;
+  emergency_phone: string | null;
+  /** Decimal column — arrives from pg as a string. */
+  target_cgpa: string | null;
+  study_intensity: string | null;
+  created_at?: string;
+};
+
+/** One row of `GET /students/:id/enrollments`. */
+export type StudentEnrollment = {
+  id: string;
+  student_id: string;
+  offering_id: string;
+  status: EnrollmentStatus;
+  enrolled_at: string;
+  semester: string;
+  section: string;
+  course_id: string;
+  course_code: string;
+  course_title: string;
+};
+
+/**
+ * `GET /students/semester/:semester` aggregates each student's offerings into a
+ * JSON array, so this row shape differs from the plain directory listing.
+ */
+export type SemesterStudent = Student & {
+  department_code?: string | null;
+  enrollments: {
+    offering_id: string;
+    course_title: string;
+    course_code: string;
+    section: string;
+    teacher: string | null;
+  }[];
+};
+
+/** `GET /teachers/:id` — joins the user row; note it omits department fields. */
+export type TeacherDetail = {
+  id: string;
+  user_id: string;
+  employee_id: string;
+  email: string;
+  role?: string;
+  department_id: number | null;
+  created_at?: string;
+};
+
+/** One row of `GET /teachers/:id/offerings`. */
+export type TeacherOffering = {
+  id: string;
+  course_id: string;
+  teacher_id: string | null;
+  semester: string;
+  section: string;
+  capacity: number;
+  course_code: string;
+  course_title: string;
+};
+
+/** `GET /admins` / `GET /admins/:id` — joined with the user and department. */
+export type AdminRecord = {
+  id: string;
+  user_id: string;
+  admin_id: string | null;
+  department_id: number | null;
+  email: string;
+  role: string;
+  is_active: boolean;
+  department_name: string | null;
+  department_code: string | null;
+  created_at?: string;
+};

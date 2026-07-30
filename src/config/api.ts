@@ -20,9 +20,14 @@ export const API_ENDPOINTS = {
   },
   ADMINS: {
     ME: `${root}/admins/me`,
+    ROOT: `${root}/admins`,
+    BY_ID: (id: string) => `${root}/admins/${id}`,
   },
   DEPARTMENTS: {
     ROOT: `${root}/departments`,
+    // Department ids are INTEGERS (serial PK), unlike every other resource here
+    // which uses a uuid. The API validates with Joi.number().integer().
+    BY_ID: (id: number) => `${root}/departments/${id}`,
   },
   COURSES: {
     ROOT: `${root}/courses`,
@@ -36,6 +41,8 @@ export const API_ENDPOINTS = {
     ROOT: `${root}/teachers`,
     ME: `${root}/teachers/me`,
     MY_OFFERINGS: `${root}/teachers/me/offerings`,
+    BY_ID: (id: string) => `${root}/teachers/${id}`,
+    OFFERINGS: (id: string) => `${root}/teachers/${id}/offerings`,
   },
   SCHEDULES: {
     // GET /schedules is student-only; teachers read their timetable from /me.
@@ -56,6 +63,11 @@ export const API_ENDPOINTS = {
   },
   STUDENTS: {
     ROOT: `${root}/students`,
+    BY_ID: (id: string) => `${root}/students/${id}`,
+    ENROLLMENTS: (id: string) => `${root}/students/${id}/enrollments`,
+    // The semester segment is free text matched against course_offerings.semester.
+    BY_SEMESTER: (semester: string) =>
+      `${root}/students/semester/${encodeURIComponent(semester)}`,
   },
   ENROLLMENTS: {
     ROOT: `${root}/enrollments`,

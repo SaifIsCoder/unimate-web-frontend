@@ -50,6 +50,13 @@ export const RETIRED_PATHS = [
 
 /** Longest prefix wins, so order here is irrelevant. */
 export const ROUTE_RULES: readonly RouteRule[] = [
+  /**
+   * Longest prefix wins, so this must be listed as its own rule rather than
+   * inheriting `/admin`. `super_admin` is named explicitly because the
+   * hierarchy only expands super_admin → admin, never the reverse — an
+   * `["admin"]` rule here would admit plain admins.
+   */
+  { prefix: "/admin/administrators", roles: ["super_admin"] },
   { prefix: "/admin", roles: ["admin"] },
   { prefix: "/teacher", roles: ["teacher"] },
   // Shared by every staff role — one page, role-aware content.

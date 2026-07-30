@@ -55,6 +55,12 @@ export type NavSection = {
 const ADMIN = ["admin"] as const;
 const TEACHER = ["teacher"] as const;
 const ANY_STAFF = ["admin", "teacher"] as const;
+/**
+ * Explicitly super_admin — `hasRole` expands super_admin → admin but never the
+ * reverse, so this excludes plain admins. Must match the `/admin/administrators`
+ * rule in lib/routes.ts.
+ */
+const SUPER_ADMIN = ["super_admin"] as const;
 
 const SECTIONS: NavSection[] = [
   {
@@ -72,6 +78,7 @@ const SECTIONS: NavSection[] = [
         icon: <BoxCubeIcon />,
         roles: ADMIN,
         subItems: [
+          { name: "Departments", path: "/admin/departments", roles: ADMIN },
           { name: "Courses", path: "/admin/courses", roles: ADMIN },
           { name: "Offerings", path: "/admin/offerings", roles: ADMIN },
         ],
@@ -87,6 +94,17 @@ const SECTIONS: NavSection[] = [
         icon: <GroupIcon />,
         path: "/admin/users",
         roles: ADMIN,
+      },
+      {
+        name: "Directories",
+        icon: <UserCircleIcon />,
+        roles: ADMIN,
+        subItems: [
+          { name: "Students", path: "/admin/students", roles: ADMIN },
+          { name: "Faculty", path: "/admin/faculty", roles: ADMIN },
+          // Hidden entirely from plain admins, matching the route rule.
+          { name: "Administrators", path: "/admin/administrators", roles: SUPER_ADMIN },
+        ],
       },
     ],
   },

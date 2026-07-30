@@ -4,8 +4,8 @@ Running record of the phased build described in `dashboard_architecture_plan.md`
 Updated at the end of every phase. Each entry states what shipped, how it was
 verified, and what was deliberately left out.
 
-**Backend surface reachable from the dashboard: 51 / 134 endpoints (38%).**
-Phase 1 changed no endpoint coverage — it was foundation work.
+**Backend surface reachable from the dashboard: 66 / 134 endpoints (49%).**
+Phases 1 and 1.x were foundation work; Phase 2 added 15 endpoints.
 
 | Phase | Scope | Status |
 | :--- | :--- | :--- |
@@ -13,7 +13,7 @@ Phase 1 changed no endpoint coverage — it was foundation work.
 | **1** | **Harden the foundation** | **✅ Complete — 2026-07-29** |
 | **1.1** | **Cleanup pass — boilerplate, CSP, error boundaries, tests** | **✅ Complete — 2026-07-29** |
 | **1.2** | **Phase 1 close-out — boilerplate deleted, /profile, deps pruned** | **✅ Complete — 2026-07-29** |
-| 2 | Complete admin foundations (Departments, Student Directory, Faculty Roster, Admin Directory) | ⬜ Not started |
+| **2** | **Complete admin foundations (Departments, Student Directory, Faculty Roster, Admin Directory)** | **✅ Complete — 2026-07-30** |
 | 3 | Master Timetable (schedules + exceptions) | ⬜ Not started |
 | 4 | Assignments & Tasks (11 endpoints) | ⬜ Not started |
 | 5 | Complete the gradebook (transcripts, weights, attendance reporting) | ⬜ Not started |
@@ -375,3 +375,109 @@ holds, CSP nonce matches with 0 scripts missing one, 6/6 security headers.
   gate until the data-fetching pattern is reworked — worth folding into Phase 2.
 - `/account` now 404s. It existed only within this session, so no real bookmarks.
 - 15 dev-only npm advisories remain (eslint toolchain). Production: **0**.
+
+---
+
+## Phase 2 — Complete Admin Foundations ✅
+
+Every people-management and institutional-setup endpoint is now reachable.
+**Backend coverage: 51 → 66 of 134 endpoints (38% → 49%).**
+
+### Shipped
+
+| Screen | Route | Endpoints wired |
+| :--- | :--- | :--- |
+| Departments CRUD | `/admin/departments` | `GET/POST/PATCH/DELETE /departments` |
+| Student Directory | `/admin/students` | `GET /students`, `GET /students/semester/:semester` |
+| Student detail | `/admin/students/[studentId]` | `GET /students/:id`, `GET /students/:id/enrollments` |
+| Faculty Roster | `/admin/faculty` | `GET /teachers`, `PATCH`, `DELETE` |
+| Faculty detail | `/admin/faculty/[teacherId]` | `GET /teachers/:id`, `GET /teachers/:id/offerings` |
+| Administrators | `/admin/administrators` | `GET /admins`, `GET /admins/:id`, `PATCH`, `DELETE` |
+
+New: `services/directoryService.ts`, `components/admin/ConfirmDialog.tsx`,
+`components/admin/DetailField.tsx`, and 9 Phase-2 types in `types/academics.ts`.
+
+### Department ids are integers
+
+Unlike every other resource, departments use a serial integer PK. `DEPARTMENTS.BY_ID`
+takes `number`, the editing state is `number | null`, and `rowKey` stringifies
+explicitly rather than letting a number leak into a uuid-shaped slot.
+
+### Super-admin gating — three layers
+
+`/admin/administrators` is guarded independently at each level, because any one
+of them can be bypassed:
+
+1. **Edge** — a `/admin/administrators` rule in `lib/routes.ts` that wins over
+   `/admin` by longest-prefix match.
+2. **Navigation** — the link is filtered out by `can()` for plain admins.
+3. **Client tree** — a `RequireRole roles={["super_admin"]}` layout.
+
+`super_admin` is named explicitly everywhere. `hasRole` expands
+super_admin → admin but never the reverse, so an `["admin"]` rule would have
+quietly admitted plain admins.
+
+Verified at runtime against a production server: admin → **307 to `/admin`**,
+super_admin → **200**.
+
+A super admin also cannot delete their own admin profile — the button is
+disabled, since removing it would lock them out of this screen.
+
+### Role assignment guard
+
+Already satisfied: `assignableRoles()` was wired into the User Provisioning role
+picker in an earlier phase and filters to `student`/`teacher` for a plain admin,
+adding `admin`/`super_admin` only for a super admin. Confirmed rather than
+rebuilt.
+
+### Effect pattern fixed while building
+
+The `eslint-config-next` 16.2 upgrade newly enforces
+`react-hooks/set-state-in-effect`, and the existing fetch-on-mount pattern trips
+it. Rather than add six more violations, all new pages (plus `/profile`) use an
+async closure inside the effect with an `alive` flag:
+
+```ts
+useEffect(() => {
+  let alive = true;
+  void (async () => {
+    try {
+      const rows = await fetchThing();
+      if (alive) setRows(rows);
+    } finally {
+      if (alive) setLoading(false);
+    }
+  })();
+  return () => { alive = false; };
+}, []);
+```
+
+This satisfies the rule and fixes a real bug the old pattern had: a slow response
+writing state after the user navigated away. Re-fetch helpers keep the plain
+`setLoading(true)` call because they run from event handlers, where it is fine.
+
+### Verified
+
+`typecheck` clean · **107 tests** (17 new, covering the super-admin matrix and the
+nav ⇄ access-matrix invariant) · build clean, 19 routes · lint clean on all Phase
+2 files · runtime role matrix confirmed for anon / admin / super_admin / teacher
+across all six routes including dynamic detail pages.
+
+### Known limitations
+
+- **BE-8 — department reassignment has no working endpoint.** `updateTeacherBody`
+  and `updateAdminSchema` accept a free-text `department` string, but neither
+  table has that column — only `department_id` (integer FK). `buildUpdate` maps
+  payload keys straight to column names, so sending it produces
+  `UPDATE teachers SET department = $1` and a **SQL error, not a 400**. Both edit
+  forms therefore expose only `employee_id` / `admin_id`, and say so inline. This
+  matters operationally: admins may only post announcements to their own
+  department, and there is currently no way to change it.
+- **Students are read-only.** `PATCH /students/:id` exists but its only useful
+  field is `roll_number` — `department` hits the same BE-8 bug and `batch` is
+  set at provisioning. Not worth a form yet.
+- `GET /teachers/:id` returns no `department_name` (it joins only the user row),
+  so the detail page resolves the name client-side from the departments list.
+- **12 pre-existing lint errors remain** in 10 untouched files, all the same
+  `set-state-in-effect` rule. The fix pattern above is proven and mechanical —
+  worth a dedicated pass to get `npm run lint` green for CI.

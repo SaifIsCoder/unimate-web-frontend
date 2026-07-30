@@ -51,7 +51,7 @@ Joi with `stripUnknown: true`, `allowUnknown: false`, `convert: true`. Unknown k
 
 ## 2. Current Implementation Status
 
-The dashboard is well past boilerplate. **51 of 134 endpoints (38%) are reachable** from `src/config/api.ts`.
+The dashboard is well past boilerplate. **66 of 134 endpoints (49%) are reachable** from `src/config/api.ts` as of Phase 2.
 
 ### Built and working
 
@@ -255,6 +255,24 @@ Push is **Firebase FCM**, not Expo, and fires only as a side effect of announcem
 
 *Needs:* a compose-and-send endpoint if manual notifications are wanted. Otherwise drop the feature and rely on announcements.
 
+### BE-8 · Department reassignment is broken — blocks moving staff between departments
+
+`updateTeacherBody`, `updateAdminSchema` and `updateStudentBody` all accept a
+free-text `department` string, but none of those tables has such a column — only
+`department_id` (integer FK). `buildUpdate` maps payload keys straight to column
+names, so the request becomes `UPDATE teachers SET department = $1` and fails
+with a **SQL error, not a validation 400**.
+
+*Impact:* there is no way to move a teacher, admin or student between
+departments. This is not cosmetic — admins may only post announcements to their
+own department, so a mis-assigned admin cannot be corrected.
+
+*Needs:* replace `department` with `department_id: Joi.number().integer()` in all
+three schemas. The column already exists, so no migration is required.
+
+*Found:* while building the Phase 2 faculty and administrator edit forms, which
+therefore expose only `employee_id` / `admin_id`.
+
 ### Not a gap, but constrains the UI
 
 - **Rooms are free text.** `schedules.room` is a string; there is no rooms entity. Overlap detection catches only same-offering/same-day collisions — **not** teacher double-booking or room clashes. Cross-offering conflict checks must be client-side, or become a backend request.
@@ -285,7 +303,7 @@ Auth + session, RBAC route groups, user provisioning, courses, offerings, enroll
 
 ---
 
-### Phase 2 — Complete Admin Foundations
+### Phase 2 — Complete Admin Foundations ✅ *(delivered 2026-07-30)*
 *Endpoints already exist and are unused.* **Depends on:** Phase 1.
 
 - **Departments CRUD** — `POST/PATCH/DELETE /departments`. Note the id is an **integer**, not a UUID.

@@ -27,6 +27,15 @@ describe("ruleFor — longest prefix wins", () => {
     expect(ruleFor("/profile")?.roles).toEqual(["admin", "teacher"]);
   });
 
+  it("gives /admin/administrators a stricter rule than its /admin parent", () => {
+    // The whole super-admin gate rests on longest-prefix winning here. If the
+    // shorter /admin rule ever took precedence, plain admins would silently
+    // gain access to administrator management.
+    expect(ruleFor("/admin/administrators")?.prefix).toBe("/admin/administrators");
+    expect(ruleFor("/admin/administrators")?.roles).toEqual(["super_admin"]);
+    expect(ruleFor("/admin/administrators/anything")?.roles).toEqual(["super_admin"]);
+  });
+
   it("applies a rule to nested paths", () => {
     expect(ruleFor("/admin/users")?.prefix).toBe("/admin");
     expect(ruleFor("/teacher/classes/abc-123")?.prefix).toBe("/teacher");
@@ -97,16 +106,35 @@ describe("the route access matrix", () => {
     ["admin", "/profile", "allow"],
     ["admin", "/teacher", "redirect"],
 
+    // Phase 2 admin screens
+    ["admin", "/admin/departments", "allow"],
+    ["admin", "/admin/students", "allow"],
+    ["admin", "/admin/students/abc-123", "allow"],
+    ["admin", "/admin/faculty", "allow"],
+    ["admin", "/admin/faculty/abc-123", "allow"],
+    // ...but NOT administrator management
+    ["admin", "/admin/administrators", "redirect"],
+
     // super_admin — inherits admin, still not a teacher
     ["super_admin", "/admin", "allow"],
     ["super_admin", "/admin/users", "allow"],
+    ["super_admin", "/admin/departments", "allow"],
+    ["super_admin", "/admin/students", "allow"],
+    ["super_admin", "/admin/faculty", "allow"],
+    ["super_admin", "/admin/administrators", "allow"],
     ["super_admin", "/profile", "allow"],
     ["super_admin", "/teacher", "redirect"],
+
+    // teacher — none of the admin directories
+    ["teacher", "/admin/students", "redirect"],
+    ["teacher", "/admin/faculty", "redirect"],
+    ["teacher", "/admin/administrators", "redirect"],
 
     // student — has no dashboard surface at all
     ["student", "/admin", "redirect"],
     ["student", "/teacher", "redirect"],
     ["student", "/profile", "redirect"],
+    ["student", "/admin/administrators", "redirect"],
   ];
 
   it.each(matrix)("%s visiting %s -> %s", (role, path, expected) => {
@@ -138,8 +166,30 @@ describe("navigation reflects the same permissions", () => {
     expect(links).not.toContain("/teacher");
   });
 
-  it("gives super_admin everything an admin sees", () => {
-    expect(new Set(linksFor("super_admin"))).toEqual(new Set(linksFor("admin")));
+  it("gives super_admin everything an admin sees, plus administrator management", () => {
+    const adminLinks = new Set(linksFor("admin"));
+    const superLinks = new Set(linksFor("super_admin"));
+
+    for (const link of adminLinks) expect(superLinks).toContain(link);
+    expect(superLinks).toContain("/admin/administrators");
+  });
+
+  it("hides the administrators link from a plain admin", () => {
+    // The nav is the first of three layers guarding this section; the other two
+    // are the route rule and the RequireRole layout.
+    expect(linksFor("admin")).not.toContain("/admin/administrators");
+    expect(linksFor("teacher")).not.toContain("/admin/administrators");
+  });
+
+  it("links every Phase 2 directory for an admin", () => {
+    const links = linksFor("admin");
+    for (const path of [
+      "/admin/departments",
+      "/admin/students",
+      "/admin/faculty",
+    ]) {
+      expect(links).toContain(path);
+    }
   });
 
   it("shows nothing to signed-out or student users", () => {

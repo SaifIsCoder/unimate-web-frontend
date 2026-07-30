@@ -1,4 +1,5 @@
 import API_ENDPOINTS from "@/config/api";
+import type { AdminRecord } from "@/types/academics";
 import { httpGet } from "./http";
 
 /**
@@ -49,17 +50,9 @@ export const getMyProfile = () => httpGet<MeProfile>(API_ENDPOINTS.AUTH.ME);
  * without an `admins` row is a legitimate state, and the Account page should
  * degrade rather than fail.
  */
-export type AdminRecord = {
-  id: string;
-  user_id: string;
-  admin_id: string;
-  department_id: number | null;
-  department_name?: string | null;
-  department_code?: string | null;
-  email: string;
-  role: string;
-  is_active: boolean;
-};
+// Canonical definition lives in types/academics.ts; re-exported so existing
+// imports from this module keep working.
+export type { AdminRecord };
 
 export const getMyAdminRecord = async (): Promise<AdminRecord | null> => {
   try {

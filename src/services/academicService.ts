@@ -10,8 +10,40 @@ import { httpDelete, httpGet, httpPatch, httpPost } from "./http";
 
 // ── Departments ───────────────────────────────────────────────────────────────
 
+/**
+ * Department ids are INTEGERS — a serial primary key, unlike every other
+ * resource in this API, which uses uuids. The route validates with
+ * `Joi.number().integer()`, so passing a numeric string still works, but the
+ * types here keep it a number so nothing downstream starts treating it as a
+ * uuid.
+ */
+export type DepartmentPayload = {
+  name: string;
+  code: string;
+  description?: string;
+};
+
 export const listDepartments = () =>
   httpGet<Department[]>(API_ENDPOINTS.DEPARTMENTS.ROOT);
+
+export const getDepartment = (id: number) =>
+  httpGet<Department>(API_ENDPOINTS.DEPARTMENTS.BY_ID(id));
+
+/** `code` is uppercased server-side; we mirror it so the UI shows what is stored. */
+export const createDepartment = (payload: DepartmentPayload) =>
+  httpPost<Department>(API_ENDPOINTS.DEPARTMENTS.ROOT, payload);
+
+/** At least one field is required — the API rejects an empty patch with 400. */
+export const updateDepartment = (id: number, payload: Partial<DepartmentPayload>) =>
+  httpPatch<Department>(API_ENDPOINTS.DEPARTMENTS.BY_ID(id), payload);
+
+/**
+ * Hard delete. Courses, students, teachers and admins reference departments, so
+ * the database may refuse with a foreign-key violation — the caller should
+ * surface the API's message rather than assume success.
+ */
+export const deleteDepartment = (id: number) =>
+  httpDelete<Department>(API_ENDPOINTS.DEPARTMENTS.BY_ID(id));
 
 // ── Courses ───────────────────────────────────────────────────────────────────
 
