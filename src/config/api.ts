@@ -45,8 +45,16 @@ export const API_ENDPOINTS = {
     OFFERINGS: (id: string) => `${root}/teachers/${id}/offerings`,
   },
   SCHEDULES: {
-    // GET /schedules is student-only; teachers read their timetable from /me.
+    // GET /schedules (the collection) is student-only; teachers read their own
+    // timetable from /me, and admins go per-offering via BY_OFFERING below.
     MINE: `${root}/schedules/me`,
+    ROOT: `${root}/schedules`,
+    BY_ID: (id: string) => `${root}/schedules/${id}`,
+    BY_OFFERING: (offeringId: string) => `${root}/schedules/offering/${offeringId}`,
+    EXCEPTIONS: `${root}/schedules/exceptions`,
+    EXCEPTION_BY_ID: (id: string) => `${root}/schedules/exceptions/${id}`,
+    EXCEPTIONS_BY_OFFERING: (offeringId: string) =>
+      `${root}/schedules/offering/${offeringId}/exceptions`,
   },
   GRADES: {
     ROOT: `${root}/grades`,

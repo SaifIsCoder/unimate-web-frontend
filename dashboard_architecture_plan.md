@@ -51,7 +51,7 @@ Joi with `stripUnknown: true`, `allowUnknown: false`, `convert: true`. Unknown k
 
 ## 2. Current Implementation Status
 
-The dashboard is well past boilerplate. **66 of 134 endpoints (49%) are reachable** from `src/config/api.ts` as of Phase 2.
+The dashboard is well past boilerplate. **72 of 134 endpoints (54%) are reachable** from `src/config/api.ts` as of Phase 3.
 
 ### Built and working
 
@@ -316,7 +316,7 @@ Auth + session, RBAC route groups, user provisioning, courses, offerings, enroll
 
 ---
 
-### Phase 3 — Master Timetable
+### Phase 3 — Master Timetable ✅ *(delivered 2026-07-30)*
 **Depends on:** Phase 2 (offerings + teachers must be manageable). *7 of 8 schedule endpoints currently unused.*
 
 - Weekly grid per offering — `GET /schedules/offering/:offeringId`.

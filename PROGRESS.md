@@ -4,8 +4,8 @@ Running record of the phased build described in `dashboard_architecture_plan.md`
 Updated at the end of every phase. Each entry states what shipped, how it was
 verified, and what was deliberately left out.
 
-**Backend surface reachable from the dashboard: 66 / 134 endpoints (49%).**
-Phases 1 and 1.x were foundation work; Phase 2 added 15 endpoints.
+**Backend surface reachable from the dashboard: 72 / 134 endpoints (54%).**
+Phases 1 and 1.x were foundation work; Phase 2 added 15 endpoints, Phase 3 added 6.
 
 | Phase | Scope | Status |
 | :--- | :--- | :--- |
@@ -14,7 +14,7 @@ Phases 1 and 1.x were foundation work; Phase 2 added 15 endpoints.
 | **1.1** | **Cleanup pass — boilerplate, CSP, error boundaries, tests** | **✅ Complete — 2026-07-29** |
 | **1.2** | **Phase 1 close-out — boilerplate deleted, /profile, deps pruned** | **✅ Complete — 2026-07-29** |
 | **2** | **Complete admin foundations (Departments, Student Directory, Faculty Roster, Admin Directory)** | **✅ Complete — 2026-07-30** |
-| 3 | Master Timetable (schedules + exceptions) | ⬜ Not started |
+| **3** | **Master Timetable (schedules + exceptions)** | **✅ Complete — 2026-07-30** |
 | 4 | Assignments & Tasks (11 endpoints) | ⬜ Not started |
 | 5 | Complete the gradebook (transcripts, weights, attendance reporting) | ⬜ Not started |
 | 6 | Communications & community (needs BE-1 for moderation) | ⬜ Blocked in part |
@@ -481,3 +481,93 @@ across all six routes including dynamic detail pages.
 - **12 pre-existing lint errors remain** in 10 untouched files, all the same
   `set-state-in-effect` rule. The fix pattern above is proven and mechanical —
   worth a dedicated pass to get `npm run lint` green for CI.
+
+---
+
+## Phase 3 — Master Timetable ✅
+
+Recurring weekly slots plus one-off exceptions, per offering.
+**Backend coverage: 66 → 72 of 134 endpoints (49% → 54%).** Schedules go 1/8 → 7/8.
+
+### Shipped
+
+| Piece | File |
+| :--- | :--- |
+| Service, all 6 endpoints | `services/scheduleService.ts` |
+| Conflict + merge logic (pure) | `lib/timetable.ts` |
+| Weekly grid | `components/admin/timetable/WeeklyGrid.tsx` |
+| Slot form | `components/admin/timetable/SlotForm.tsx` |
+| Exception form | `components/admin/timetable/ExceptionForm.tsx` |
+| Page | `/admin/timetable` |
+
+### Two backend traps handled in the service layer
+
+**1. The server's overlap check is string comparison.** It runs
+`sch.start_time < payload.end_time` on raw strings while its Joi pattern accepts
+a single-digit hour. So `"10:00:00" < "9:30"` is `true` — lexicographically
+correct, chronologically wrong — and a genuine overlap passes the 409 guard.
+`normaliseTime` pads everything to `HH:mm:ss` before sending, and there is a test
+asserting the exact failing comparison.
+
+**2. `date` is a Postgres `date` served as a UTC timestamp.** node-postgres
+hydrates it into a JS Date, which serialises to `2026-08-03T00:00:00.000Z`.
+Parsing that and reading local parts shifts the day for anyone west of UTC.
+`toDateKey` slices the ISO string instead, and `dayOfWeekFor` computes in UTC.
+
+### Conflict detection — two tiers
+
+**Server-authoritative (hard block).** Same-offering, same-day overlap returns
+409. The same condition is evaluated client-side first so the user sees it
+before submitting, and the real 409 is surfaced inline in the form if the two
+ever disagree.
+
+**Advisory (dismissible).** Teacher double-booking and room clashes across *other*
+offerings. The API checks neither — its guard is scoped to one offering, and rooms
+are an unconstrained free-text column with no entity behind them. So these warn
+and require one extra click ("Add anyway"), never a block: co-taught sessions and
+two rooms with the same name are both legitimate.
+
+Rooms are matched case- and whitespace-insensitively, and two *blank* rooms or two
+*unassigned* teachers are never treated as a match — that would flag every
+unassigned offering against every other.
+
+### The rate limit shaped the design
+
+There is no bulk schedules endpoint, so cross-offering checking needs one request
+per offering against a **100-requests-per-15-minutes** budget. The index is
+therefore built only when an admin first opens the add-slot form — never on page
+load — then cached for the session, fetched at a concurrency of 4, and invalidated
+when a slot changes. Per-offering failures are swallowed: a partial index still
+catches most clashes, and an advisory feature must never block scheduling. If it
+comes back empty the form says so.
+
+### Merge logic
+
+`buildWeekView` folds slots and exceptions into one view: exceptions attach to
+their parent slot, extras get their own section, and a slot with any cancellation
+is struck through (it still recurs — this means "has cancelled dates", not
+"deleted").
+
+Exceptions whose `schedule_id` matches no slot are collected as **orphaned** and
+shown in a warning panel rather than dropped, which would hide real rows from the
+user with no way to clean them up.
+
+The exception form also catches two things the API allows but which are almost
+always mistakes: cancelling a Monday slot on a Tuesday date (stores a row that
+never matches), and adding a second exception to a slot on a date that already
+has one (two contradictory records).
+
+### Verified
+
+`typecheck` clean · **150 tests** (44 new, all of `lib/timetable.ts`) · lint clean
+on every Phase 3 file · build clean, 20 routes · runtime gating on
+`/admin/timetable`: anon 307, teacher 307, admin 200, super_admin 200.
+
+### Known limitations
+
+- **No update endpoint** for slots or exceptions — editing means delete then
+  recreate. The UI reflects that rather than faking an edit affordance.
+- **Rooms remain free text.** Advisory matching is string equality, so "Lab 3"
+  and "Lab-3" read as different rooms. A rooms entity would fix it properly.
+- The grid shows the recurring week, not a specific calendar week. Exceptions are
+  listed by date under their slot; a date-ranged view is a Phase 7 polish item.

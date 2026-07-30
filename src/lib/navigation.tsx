@@ -83,6 +83,7 @@ const SECTIONS: NavSection[] = [
           { name: "Offerings", path: "/admin/offerings", roles: ADMIN },
         ],
       },
+      { name: "Master Timetable", icon: <CalenderIcon />, path: "/admin/timetable", roles: ADMIN },
       { name: "Enrollments", icon: <ListIcon />, path: "/admin/enrollments", roles: ADMIN },
     ],
   },

@@ -339,3 +339,62 @@ export type AdminRecord = {
   department_code: string | null;
   created_at?: string;
 };
+
+// ── Phase 3: master timetable ────────────────────────────────────────────────
+
+export const DAYS_OF_WEEK = [
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+] as const;
+
+export type DayOfWeek = (typeof DAYS_OF_WEEK)[number];
+
+export const EXCEPTION_TYPES = ["cancelled", "rescheduled", "extra"] as const;
+export type ExceptionType = (typeof EXCEPTION_TYPES)[number];
+
+/**
+ * A recurring weekly slot, as returned by `GET /schedules/offering/:offeringId`.
+ *
+ * That endpoint is a plain `SELECT *`, so the primary key is `id` — unlike the
+ * student/teacher timetable queries, which alias it to `schedule_id`. Keep the
+ * two shapes distinct; conflating them silently breaks delete.
+ *
+ * `start_time`/`end_time` are Postgres `time` columns and arrive as
+ * "HH:mm:ss" strings.
+ */
+export type ScheduleSlot = {
+  id: string;
+  offering_id: string;
+  day_of_week: DayOfWeek;
+  start_time: string;
+  end_time: string;
+  room: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+/**
+ * A one-off deviation, from `GET /schedules/offering/:offeringId/exceptions`.
+ * Also a `SELECT *`, so again the key is `id`.
+ *
+ * `date` is a Postgres `date`, which node-postgres hydrates into a JS Date and
+ * then serialises as a full UTC timestamp ("2026-08-03T00:00:00.000Z"). Never
+ * feed it to `new Date()` and read local parts — see `toDateKey` in
+ * lib/timetable.ts.
+ */
+export type OfferingException = {
+  id: string;
+  offering_id: string;
+  schedule_id: string | null;
+  date: string;
+  exception_type: ExceptionType;
+  new_start_time: string | null;
+  new_end_time: string | null;
+  new_room: string | null;
+  created_at?: string;
+};

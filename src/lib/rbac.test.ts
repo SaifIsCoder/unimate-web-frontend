@@ -106,6 +106,12 @@ describe("the route access matrix", () => {
     ["admin", "/profile", "allow"],
     ["admin", "/teacher", "redirect"],
 
+    // Phase 3 master timetable
+    ["admin", "/admin/timetable", "allow"],
+    ["super_admin", "/admin/timetable", "allow"],
+    ["teacher", "/admin/timetable", "redirect"],
+    [undefined, "/admin/timetable", "redirect"],
+
     // Phase 2 admin screens
     ["admin", "/admin/departments", "allow"],
     ["admin", "/admin/students", "allow"],
@@ -181,12 +187,13 @@ describe("navigation reflects the same permissions", () => {
     expect(linksFor("teacher")).not.toContain("/admin/administrators");
   });
 
-  it("links every Phase 2 directory for an admin", () => {
+  it("links every Phase 2 directory and the Phase 3 timetable for an admin", () => {
     const links = linksFor("admin");
     for (const path of [
       "/admin/departments",
       "/admin/students",
       "/admin/faculty",
+      "/admin/timetable",
     ]) {
       expect(links).toContain(path);
     }
