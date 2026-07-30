@@ -1,32 +1,150 @@
 "use client";
-import React, { useState } from "react";
+
+import React, { useEffect, useState } from "react";
 import { Dropdown } from "../ui/dropdown/Dropdown";
+import { errorMessage } from "@/components/admin/FeedbackBanner";
+import {
+  countUnread,
+  listNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+} from "@/services/notificationService";
+import type { AppNotification } from "@/types/academics";
+
+/** "3 minutes ago" without pulling in a date library for one string. */
+const relativeTime = (iso: string): string => {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "";
+
+  const seconds = Math.round((Date.now() - then) / 1000);
+  if (seconds < 60) return "just now";
+
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+
+  const days = Math.round(hours / 24);
+  if (days < 7) return `${days}d ago`;
+
+  return new Date(iso).toLocaleDateString();
+};
 
 /**
- * Notification bell.
+ * Notification inbox.
  *
- * Intentionally an empty shell until Phase 6 wires it to the real endpoints
- * (`GET /notifications`, `PATCH /notifications/:id/read`,
- * `PATCH /notifications/read-all`). It previously rendered ~300 lines of
- * hardcoded sample notifications behind a dead "View All" link, telling users
- * they had messages that did not exist.
+ * Lives in the global header so it is reachable from every screen — these are
+ * announcements the user may have missed, not a destination they would navigate
+ * to deliberately.
  *
- * The pulsing unread dot is deliberately gone too: an indicator with no data
- * behind it is the same lie in smaller form. It comes back with a real count.
+ * Fetched when the panel opens rather than on mount. The API allows 100
+ * requests / 15 min per IP and this component renders on every page, so polling
+ * or eager loading would spend a meaningful share of that budget on users who
+ * never open it.
  */
 export default function NotificationDropdown() {
   const [isOpen, setIsOpen] = useState(false);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  /**
+   * How many times the panel has been opened, and how many of those fetches
+   * have settled. Loading is derived from the difference rather than held as
+   * its own flag, which would need a synchronous setState inside the effect.
+   */
+  const [openCount, setOpenCount] = useState(0);
+  const [settledCount, setSettledCount] = useState(0);
+
+  const loading = settledCount < openCount;
+  const loaded = settledCount > 0;
+
+  const unread = countUnread(notifications);
+
+  // Refetches each time the panel opens, so it never shows a stale inbox.
+  // `openCount` is the trigger; nothing is set synchronously in the effect.
+  useEffect(() => {
+    if (openCount === 0) return;
+
+    let alive = true;
+
+    void (async () => {
+      try {
+        const rows = await listNotifications({ limit: 20 });
+        if (!alive) return;
+        setNotifications(rows);
+        setError(null);
+      } catch (caught) {
+        if (alive) setError(errorMessage(caught, "Could not load notifications."));
+      } finally {
+        // Settles whether it succeeded or failed, so a failure does not spin.
+        if (alive) setSettledCount(openCount);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [openCount]);
+
+  const handleMarkRead = async (notification: AppNotification) => {
+    if (notification.is_read) return;
+
+    // Optimistic: the request is idempotent and a failure only means the dot
+    // reappears on the next open.
+    setNotifications((previous) =>
+      previous.map((row) => (row.id === notification.id ? { ...row, is_read: true } : row)),
+    );
+
+    try {
+      await markNotificationRead(notification.id);
+    } catch {
+      setNotifications((previous) =>
+        previous.map((row) =>
+          row.id === notification.id ? { ...row, is_read: false } : row,
+        ),
+      );
+    }
+  };
+
+  const handleMarkAll = async () => {
+    setBusy(true);
+    try {
+      const updated = await markAllNotificationsRead();
+      // The endpoint returns the updated rows, so trust them over a local guess.
+      setNotifications(updated);
+      setError(null);
+    } catch (caught) {
+      setError(errorMessage(caught, "Could not mark everything as read."));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="relative">
       <button
         type="button"
         className="dropdown-toggle relative flex h-11 w-11 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-white"
-        onClick={() => setIsOpen((open) => !open)}
-        aria-label="Notifications"
+        onClick={() => {
+          setIsOpen((open) => {
+            // Bumping the counter from the handler (not an effect) is what
+            // triggers the refetch.
+            if (!open) setOpenCount((count) => count + 1);
+            return !open;
+          });
+        }}
+        aria-label={unread > 0 ? `Notifications, ${unread} unread` : "Notifications"}
         aria-haspopup="true"
         aria-expanded={isOpen}
       >
+        {/* The dot only appears once there is real data behind it — an
+            indicator with nothing behind it is worse than none. */}
+        {loaded && unread > 0 && (
+          <span className="absolute right-0 top-0.5 z-10 flex h-2 w-2 rounded-full bg-orange-400">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-orange-400 opacity-75" />
+          </span>
+        )}
         <svg
           className="fill-current"
           width="20"
@@ -47,11 +165,16 @@ export default function NotificationDropdown() {
       <Dropdown
         isOpen={isOpen}
         onClose={() => setIsOpen(false)}
-        className="absolute -right-[240px] mt-[17px] flex w-[350px] flex-col rounded-2xl border border-gray-200 bg-white p-3 shadow-theme-lg dark:border-gray-800 dark:bg-gray-dark sm:w-[361px] lg:right-0"
+        className="absolute -right-[240px] mt-[17px] flex max-h-[480px] w-[350px] flex-col rounded-2xl border border-gray-200 bg-white p-3 shadow-theme-lg dark:border-gray-800 dark:bg-gray-dark sm:w-[380px] lg:right-0"
       >
         <div className="mb-3 flex items-center justify-between border-b border-gray-100 pb-3 dark:border-gray-700">
           <h5 className="text-lg font-semibold text-gray-800 dark:text-gray-200">
             Notifications
+            {unread > 0 && (
+              <span className="ml-2 rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-700 dark:bg-orange-500/15 dark:text-orange-400">
+                {unread}
+              </span>
+            )}
           </h5>
           <button
             type="button"
@@ -77,14 +200,91 @@ export default function NotificationDropdown() {
           </button>
         </div>
 
-        <div className="flex flex-col items-center justify-center gap-1 px-4 py-10 text-center">
-          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            No new notifications
+        {loading && (
+          <div className="space-y-2 p-2" aria-hidden="true">
+            {[0, 1, 2].map((row) => (
+              <div
+                key={row}
+                className="h-12 animate-pulse rounded-lg bg-gray-100 dark:bg-gray-800"
+              />
+            ))}
+          </div>
+        )}
+
+        {!loading && error && (
+          <p className="px-4 py-6 text-center text-sm text-error-600 dark:text-error-400">
+            {error}
           </p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
-            Announcements sent to you will appear here.
-          </p>
-        </div>
+        )}
+
+        {!loading && !error && notifications.length === 0 && (
+          <div className="flex flex-col items-center justify-center gap-1 px-4 py-10 text-center">
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              No notifications
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              Announcements sent to you will appear here.
+            </p>
+          </div>
+        )}
+
+        {!loading && !error && notifications.length > 0 && (
+          <>
+            <ul className="flex-1 space-y-1 overflow-y-auto">
+              {notifications.map((notification) => (
+                <li key={notification.id}>
+                  <button
+                    type="button"
+                    onClick={() => void handleMarkRead(notification)}
+                    className={`flex w-full gap-3 rounded-lg p-3 text-left transition hover:bg-gray-50 dark:hover:bg-white/5 ${
+                      notification.is_read ? "" : "bg-brand-50/60 dark:bg-brand-500/10"
+                    }`}
+                  >
+                    <span
+                      className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+                        notification.is_read ? "bg-transparent" : "bg-brand-500"
+                      }`}
+                      aria-hidden="true"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span
+                        className={`block text-sm ${
+                          notification.is_read
+                            ? "text-gray-600 dark:text-gray-400"
+                            : "font-semibold text-gray-800 dark:text-white/90"
+                        }`}
+                      >
+                        {notification.title}
+                      </span>
+                      <span className="mt-0.5 block line-clamp-2 text-xs text-gray-500 dark:text-gray-400">
+                        {notification.message}
+                      </span>
+                      <span className="mt-1 block text-[11px] text-gray-400">
+                        {relativeTime(notification.created_at)}
+                        {!notification.is_read && " · click to mark read"}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+
+            <div className="mt-3 border-t border-gray-100 pt-3 dark:border-gray-700">
+              <button
+                type="button"
+                onClick={() => void handleMarkAll()}
+                disabled={busy || unread === 0}
+                className="w-full rounded-lg border border-gray-300 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
+              >
+                {busy
+                  ? "Marking…"
+                  : unread === 0
+                  ? "All caught up"
+                  : `Mark all ${unread} as read`}
+              </button>
+            </div>
+          </>
+        )}
       </Dropdown>
     </div>
   );

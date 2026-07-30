@@ -93,6 +93,13 @@ export const API_ENDPOINTS = {
   ANNOUNCEMENTS: {
     ROOT: `${root}/announcements`,
     BY_ID: (id: string) => `${root}/announcements/${id}`,
+    READ: (id: string) => `${root}/announcements/${id}/read`,
+  },
+  NOTIFICATIONS: {
+    ROOT: `${root}/notifications`,
+    READ: (id: string) => `${root}/notifications/${id}/read`,
+    // Single segment, so it never collides with the `:id/read` route above.
+    READ_ALL: `${root}/notifications/read-all`,
   },
   EVENTS: {
     ROOT: `${root}/events`,

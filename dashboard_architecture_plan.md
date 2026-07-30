@@ -51,7 +51,7 @@ Joi with `stripUnknown: true`, `allowUnknown: false`, `convert: true`. Unknown k
 
 ## 2. Current Implementation Status
 
-The dashboard is well past boilerplate. **85 of 134 endpoints (63%) are reachable** from `src/config/api.ts` as of Phase 5.
+The dashboard is well past boilerplate. **90 of 134 endpoints (67%) are reachable** from `src/config/api.ts` as of Phase 6.
 
 ### Built and working
 

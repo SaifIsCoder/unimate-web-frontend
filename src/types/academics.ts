@@ -504,3 +504,30 @@ export type Transcript = {
   total_credit_hours: number;
   courses: TranscriptCourse[];
 };
+
+// ── Phase 6: notifications ───────────────────────────────────────────────────
+
+/**
+ * An in-app notification from `GET /notifications`.
+ *
+ * The API's `transformNotification` emits each field twice — the raw column
+ * plus a camelCase alias added for the mobile client (`is_read`/`isRead`,
+ * `created_at`/`createdAt`, `message`/`body`). Both are declared so neither
+ * shape surprises a reader, but prefer the snake_case originals: the aliases
+ * exist for a different consumer and could be dropped without notice.
+ */
+export type AppNotification = {
+  id: string;
+  user_id: string;
+  type: string;
+  title: string;
+  message: string;
+  /** The announcement (or other entity) this notification points at. */
+  reference_id: string | null;
+  is_read: boolean;
+  created_at: string;
+  /** Mobile-client aliases — same values as above. */
+  isRead?: boolean;
+  createdAt?: string;
+  body?: string;
+};

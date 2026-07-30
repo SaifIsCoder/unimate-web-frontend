@@ -18,11 +18,15 @@ import DataTable, { type Column } from "@/components/admin/DataTable";
 import { listDepartments, listOfferings } from "@/services/academicService";
 import { getMyAdminProfile, type AdminProfile } from "@/services/userService";
 import {
+  canEditAnnouncement,
   createAnnouncement,
   deleteAnnouncement,
   listAnnouncements,
+  markAnnouncementRead,
+  updateAnnouncement,
   type BroadcastTarget,
 } from "@/services/communicationService";
+import { useAuth } from "@/context/AuthContext";
 import type { Announcement, Department, Offering } from "@/types/academics";
 
 type TargetKind = BroadcastTarget["kind"];
@@ -46,6 +50,9 @@ const TARGET_OPTIONS: { value: TargetKind; label: string; hint: string }[] = [
 ];
 
 export default function AnnouncementsPage() {
+  // Needed for the author-only edit guard — `author_id` is a users.id, which is
+  // exactly what AuthUser.id holds.
+  const { user } = useAuth();
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [targetKind, setTargetKind] = useState<TargetKind>("department");
@@ -61,6 +68,8 @@ export default function AnnouncementsPage() {
   const [listError, setListError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  /** Announcement being edited, if any. Only ever set for the current author. */
+  const [editing, setEditing] = useState<Announcement | null>(null);
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -223,6 +232,74 @@ export default function AnnouncementsPage() {
     }
   };
 
+  /** Loads an announcement into the composer, which becomes an edit form. */
+  const startEdit = (row: Announcement) => {
+    setEditing(row);
+    setTitle(row.title);
+    setContent(row.content);
+    setErrors({});
+    setFeedback(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const cancelEdit = () => {
+    setEditing(null);
+    setTitle("");
+    setContent("");
+    setErrors({});
+  };
+
+  const handleUpdate = async () => {
+    if (!editing) return;
+
+    const nextErrors: Record<string, string> = {};
+    if (!title.trim()) nextErrors.title = "Title is required.";
+    if (!content.trim()) nextErrors.content = "Content is required.";
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
+
+    setBusyId(editing.id);
+    setFeedback(null);
+    try {
+      await updateAnnouncement(editing.id, { title, content });
+      setFeedback({
+        variant: "success",
+        title: "Announcement updated",
+        // The server re-dispatches FCM with an "Updated: " prefix on every edit.
+        message: `"${title.trim()}" was saved. Everyone in its audience has been notified again.`,
+      });
+      cancelEdit();
+      void refresh();
+    } catch (error) {
+      setFeedback({
+        variant: "error",
+        title: "Could not update announcement",
+        message: errorMessage(
+          error,
+          "Only the original author may edit an announcement.",
+        ),
+      });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleMarkRead = async (row: Announcement) => {
+    setBusyId(row.id);
+    try {
+      await markAnnouncementRead(row.id);
+      void refresh();
+    } catch (error) {
+      setFeedback({
+        variant: "error",
+        title: "Could not mark as read",
+        message: errorMessage(error, "The server rejected the request."),
+      });
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const columns: Column<Announcement>[] = [
     {
       key: "title",
@@ -264,21 +341,64 @@ export default function AnnouncementsPage() {
     {
       key: "created",
       header: "Sent",
-      render: (row) => new Date(row.created_at).toLocaleString(),
+      render: (row) => (
+        <div>
+          <p>{new Date(row.created_at).toLocaleString()}</p>
+          {row.is_read === false && (
+            <Badge size="sm" color="warning">
+              Unread by you
+            </Badge>
+          )}
+        </div>
+      ),
     },
     {
       key: "actions",
       header: "",
-      render: (row) => (
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={busyId === row.id}
-          onClick={() => handleDelete(row)}
-        >
-          Delete
-        </Button>
-      ),
+      className: "text-right",
+      render: (row) => {
+        /**
+         * Edit is author-only. The server compares `author_id` against the
+         * caller and 403s everyone else — including admins, who may delete
+         * another author's announcement but never edit it. Hiding the button
+         * outright is the honest representation; a disabled one would imply the
+         * permission is merely unavailable right now.
+         */
+        const editable = canEditAnnouncement(row, user?.id);
+
+        return (
+          <div className="flex justify-end gap-2">
+            {row.is_read === false && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busyId === row.id}
+                onClick={() => void handleMarkRead(row)}
+              >
+                Mark read
+              </Button>
+            )}
+            {editable && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busyId === row.id}
+                onClick={() => startEdit(row)}
+              >
+                Edit
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busyId === row.id}
+              onClick={() => handleDelete(row)}
+            >
+              Delete
+            </Button>
+          </div>
+        );
+      },
     },
   ];
 
@@ -288,8 +408,12 @@ export default function AnnouncementsPage() {
 
       <div className="space-y-6">
         <ComponentCard
-          title="Broadcast an announcement"
-          desc="Pick exactly one audience. The API accepts a department, a semester, or a set of offerings — never a combination."
+          title={editing ? `Edit: ${editing.title}` : "Broadcast an announcement"}
+          desc={
+            editing
+              ? "Only the title and content can be changed — the audience is fixed at creation. Saving re-notifies everyone who received it."
+              : "Pick exactly one audience. The API accepts a department, a semester, or a set of offerings — never a combination."
+          }
         >
           <FeedbackBanner feedback={feedback} />
 
@@ -440,9 +564,23 @@ export default function AnnouncementsPage() {
             </div>
           )}
 
-          <div className="flex justify-end">
-            <Button onClick={handleSubmit} disabled={submitting}>
-              {submitting ? "Sending…" : "Send announcement"}
+          <div className="flex justify-end gap-3">
+            {editing && (
+              <Button variant="outline" onClick={cancelEdit} disabled={busyId === editing.id}>
+                Cancel
+              </Button>
+            )}
+            <Button
+              onClick={editing ? handleUpdate : handleSubmit}
+              disabled={submitting || (editing !== null && busyId === editing.id)}
+            >
+              {editing
+                ? busyId === editing.id
+                  ? "Saving…"
+                  : "Save changes"
+                : submitting
+                ? "Sending…"
+                : "Send announcement"}
             </Button>
           </div>
         </ComponentCard>

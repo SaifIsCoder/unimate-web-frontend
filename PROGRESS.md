@@ -4,8 +4,8 @@ Running record of the phased build described in `dashboard_architecture_plan.md`
 Updated at the end of every phase. Each entry states what shipped, how it was
 verified, and what was deliberately left out.
 
-**Backend surface reachable from the dashboard: 85 / 134 endpoints (63%).**
-Phases 1 and 1.x were foundation work; Phase 2 added 15, Phase 3 added 6, Phase 4 added 7, Phase 5 added 6.
+**Backend surface reachable from the dashboard: 90 / 134 endpoints (67%).**
+Phases 1 and 1.x were foundation work; Phase 2 added 15, Phase 3 added 6, Phase 4 added 7, Phase 5 added 6, Phase 6 added 5.
 
 **Lint: 0 errors, 0 warnings** as of Phase 4.
 
@@ -19,7 +19,7 @@ Phases 1 and 1.x were foundation work; Phase 2 added 15, Phase 3 added 6, Phase 
 | **3** | **Master Timetable (schedules + exceptions)** | **✅ Complete — 2026-07-30** |
 | **4** | **Assignments & Tasks** | **✅ Complete — 2026-07-30** |
 | **5** | **Complete the gradebook (transcripts, weights, attendance reporting)** | **✅ Complete — 2026-07-30** |
-| 6 | Communications & community (needs BE-1 for moderation) | ⬜ Blocked in part |
+| **6** | **Communications — inbox + announcements** *(moderation still blocked on BE-1)* | **✅ Partial — 2026-07-30** |
 | 7 | Analytics & polish (needs BE-4, BE-5) | ⬜ Blocked |
 
 ---
@@ -809,3 +809,89 @@ build clean, 22 routes · runtime gating: `/admin/attendance` and
   the 100-per-15-minutes limiter.
 - The transcript is computed live, not sealed. Re-exporting after a grade or
   weight change produces a different document; the footnote says so.
+
+---
+
+## Phase 6 (partial) — Communications ✅
+
+Notification inbox and announcement management. **Community moderation is
+deliberately excluded — still blocked on BE-1.**
+
+**Backend coverage: 85 → 90 of 134 endpoints (63% → 67%).** Notifications
+0/4 → 3/4, announcements 5/6 → 6/6 (complete).
+
+### 1. Notification inbox
+
+`services/notificationService.ts` wires all three endpoints. The inbox lives in
+the **global header**, since these are announcements a user may have missed
+rather than a destination they would navigate to.
+
+Two design decisions worth stating:
+
+**Fetched on open, never on mount.** This component renders on every page, and
+the API allows 100 requests / 15 min per IP. Eager loading — let alone polling —
+would spend a meaningful share of that budget on users who never open the panel.
+Each open refetches, so it is never stale.
+
+**The unread dot only appears once there is data behind it.** I removed that dot
+in Phase 1.1 precisely because it was decorative; it returns now that a real
+count backs it.
+
+Marking one read is optimistic (the request is idempotent, and a failure only
+means the dot reappears on next open). "Mark all" trusts the rows the endpoint
+returns rather than guessing locally.
+
+Note `GET /notifications` returns a **plain array, not a paginated envelope** —
+no `meta`, so the total is unknown and "is there more?" can only be inferred
+from a full page.
+
+### 2. Announcement management
+
+**Edit is author-only, and stricter than delete.** The server compares
+`author_id` against the caller and 403s everyone else — *including admins, who
+may delete another author's announcement but never edit it*. `canEditAnnouncement`
+encodes exactly that, and the button is **hidden entirely** rather than disabled:
+a disabled control implies the permission might become available, which it never
+will for a non-author.
+
+`author_id` is a `users.id`, which is precisely what `AuthUser.id` holds, so the
+comparison is direct — no lookup needed.
+
+The composer doubles as the edit form. Only title and content are editable; the
+audience is fixed at creation and the update schema ignores it. The success
+message says plainly that **saving re-notifies the whole audience** with an
+"Updated: " prefix — there is no silent-edit option.
+
+`updateAnnouncement` omits empty fields rather than sending `""`, because the
+server's `if (payload.title)` check would silently ignore them — a no-op that
+looks like a successful save.
+
+Read receipts: `markAnnouncementRead` is idempotent (`ON CONFLICT DO NOTHING`),
+surfaced as an "Unread by you" badge and a "Mark read" action.
+
+### Verified
+
+lint **0/0** · typecheck clean · **214 tests** (10 new, covering the author guard
+and unread counting) · build clean · runtime gating unchanged
+(`/admin/announcements` anon 307, teacher 307, admin 200).
+
+The author-guard tests cover the cases that would quietly grant access: an admin
+who did not write the post, an undefined viewer, an empty `author_id` acting as a
+wildcard, and case/whitespace variants.
+
+### Not done — blocked
+
+**Community moderation queue (BE-1).** Two independent blockers, not one:
+`community_posts.status` has no `pending` value and defaults to `active`, so
+there is nothing to approve; and `updatePost`/`deletePost` gate moderation behind
+`isAdmin`, so teachers cannot moderate at all. Both need server changes before
+any UI is worth building.
+
+### Known limitations
+
+- No unread count without opening the panel — the API has no counter endpoint,
+  and polling for one would be costly against the rate limit.
+- Notifications cannot be deleted or archived; the API offers only read-state
+  mutations.
+- Announcement edits always re-notify. Recipients receive a fresh push for a
+  typo fix.
