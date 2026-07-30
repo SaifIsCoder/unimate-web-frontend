@@ -26,14 +26,11 @@
     "apexcharts": "^4.7.0",
     "autoprefixer": "^10.4.22",
     "flatpickr": "^4.6.13",
-    "next": "16.0.10",
+    "next": "^16.2.12",
     "react": "^19.2.0",
     "react-apexcharts": "^1.8.0",
-    "react-dnd": "^16.0.1",
-    "react-dnd-html5-backend": "^16.0.1",
     "react-dom": "^19.2.0",
     "react-dropzone": "^14.3.8",
-    "swiper": "^11.2.10",
     "tailwind-merge": "^2.6.0"
   },
   "devDependencies": {
@@ -44,8 +41,8 @@
     "@types/react-dom": "^19.2.1",
     "@types/react-transition-group": "^4.4.12",
     "@vitest/coverage-v8": "^4.1.10",
-    "eslint": "^9.39.1",
-    "eslint-config-next": "16.0.7",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.2.12",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.17",
     "typescript": "^5.9.3",
@@ -59,6 +56,8 @@
     "@react-jvectormap/world": {
       "react": "^16.8.0 || ^17 || ^18 || ^19",
       "react-dom": "^16.8.0 || ^17 || ^18 || ^19"
-    }
+    },
+    "postcss": "$postcss",
+    "sharp": "^0.35.3"
   }
 }

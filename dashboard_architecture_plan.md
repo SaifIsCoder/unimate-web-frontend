@@ -90,7 +90,7 @@ The dashboard is well past boilerplate. **51 of 134 endpoints (38%) are reachabl
 
 ### Known debt
 
-- **Route protection is client-side only.** `AuthContext` redirects, but there is no `middleware.ts`, so a deep link renders briefly before bouncing. Real enforcement is server-side role middleware, which is correct — but the flash is a UX defect. Fixed in Phase 1.
+- ~~**Route protection is client-side only.**~~ **Resolved in Phase 1.** `middleware.ts` now gates at the edge off a credential-free session-hint cookie, with `RequireRole` as the second layer. The API remains the real authorisation boundary.
 - **Boilerplate still shipping**: `(ui-elements)/*` (7 pages) and `(others-pages)/*` (7 pages incl. `blank`, `calendar`, `basic-tables`) remain in the bundle and the sidebar. Removed in Phase 1.
 - **No Profile page** for either role.
 
