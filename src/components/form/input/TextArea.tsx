@@ -6,6 +6,7 @@ interface TextareaProps {
   value?: string; // Current value
   onChange?: (value: string) => void; // Change handler
   className?: string; // Additional CSS classes
+  maxLength?: number;
   disabled?: boolean; // Disabled state
   error?: boolean; // Error state
   hint?: string; // Hint text to display
@@ -17,6 +18,7 @@ const TextArea: React.FC<TextareaProps> = ({
   value = "", // Default value
   onChange, // Callback for changes
   className = "", // Additional custom styles
+  maxLength,
   disabled = false, // Disabled state
   error = false, // Error state
   hint = "", // Default hint text
@@ -44,6 +46,7 @@ const TextArea: React.FC<TextareaProps> = ({
         rows={rows}
         value={value}
         onChange={handleChange}
+        maxLength={maxLength}
         disabled={disabled}
         className={textareaClasses}
       />
