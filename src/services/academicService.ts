@@ -5,6 +5,7 @@ import type {
   Offering,
   Student,
   Teacher,
+  Paginated,
 } from "@/types/academics";
 import { httpDelete, httpGet, httpPatch, httpPost } from "./http";
 
@@ -23,8 +24,8 @@ export type DepartmentPayload = {
   description?: string;
 };
 
-export const listDepartments = () =>
-  httpGet<Department[]>(API_ENDPOINTS.DEPARTMENTS.ROOT);
+export const listDepartments = (page = 1, limit = 20) =>
+  httpGet<Paginated<Department>>(`${API_ENDPOINTS.DEPARTMENTS.ROOT}?page=${page}&limit=${limit}`);
 
 export const getDepartment = (id: number) =>
   httpGet<Department>(API_ENDPOINTS.DEPARTMENTS.BY_ID(id));
@@ -55,7 +56,8 @@ export type CreateCoursePayload = {
   has_practical: boolean;
 };
 
-export const listCourses = () => httpGet<Course[]>(API_ENDPOINTS.COURSES.ROOT);
+export const listCourses = (page = 1, limit = 20) => 
+  httpGet<Paginated<Course>>(`${API_ENDPOINTS.COURSES.ROOT}?page=${page}&limit=${limit}`);
 
 export const createCourse = (payload: CreateCoursePayload) =>
   httpPost<Course>(API_ENDPOINTS.COURSES.ROOT, payload);
@@ -77,8 +79,8 @@ export type CreateOfferingPayload = {
   practical_weight: number;
 };
 
-export const listOfferings = () =>
-  httpGet<Offering[]>(API_ENDPOINTS.OFFERINGS.ROOT);
+export const listOfferings = (page = 1, limit = 20) =>
+  httpGet<Paginated<Offering>>(`${API_ENDPOINTS.OFFERINGS.ROOT}?page=${page}&limit=${limit}`);
 
 export const createOffering = (payload: CreateOfferingPayload) =>
   httpPost<Offering>(API_ENDPOINTS.OFFERINGS.ROOT, payload);
@@ -93,6 +95,8 @@ export const deleteOffering = (id: string) =>
 
 // ── People (read-only lookups used to populate pickers) ───────────────────────
 
-export const listTeachers = () => httpGet<Teacher[]>(API_ENDPOINTS.TEACHERS.ROOT);
+export const listTeachers = (page = 1, limit = 20) => 
+  httpGet<Paginated<Teacher>>(`${API_ENDPOINTS.TEACHERS.ROOT}?page=${page}&limit=${limit}`);
 
-export const listStudents = () => httpGet<Student[]>(API_ENDPOINTS.STUDENTS.ROOT);
+export const listStudents = (page = 1, limit = 20) => 
+  httpGet<Paginated<Student>>(`${API_ENDPOINTS.STUDENTS.ROOT}?page=${page}&limit=${limit}`);

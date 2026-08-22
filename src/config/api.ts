@@ -105,6 +105,11 @@ export const API_ENDPOINTS = {
     ROOT: `${root}/events`,
     BY_ID: (id: string) => `${root}/events/${id}`,
   },
+  COMMUNITY: {
+    POSTS: `${root}/community/posts`,
+    POST: (id: string) => `${root}/community/posts/${id}`,
+    COMMENT: (id: string) => `${root}/community/comments/${id}`,
+  },
 };
 
 export default API_ENDPOINTS;

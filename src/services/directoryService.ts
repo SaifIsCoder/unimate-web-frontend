@@ -8,6 +8,7 @@ import type {
   Teacher,
   TeacherDetail,
   TeacherOffering,
+  Paginated,
 } from "@/types/academics";
 import { httpDelete, httpGet, httpPatch } from "./http";
 
@@ -20,7 +21,8 @@ import { httpDelete, httpGet, httpPatch } from "./http";
 
 // ── Students (admin-only; read-only in this phase) ───────────────────────────
 
-export const listStudents = () => httpGet<Student[]>(API_ENDPOINTS.STUDENTS.ROOT);
+export const listStudents = (page = 1, limit = 20) =>
+  httpGet<Paginated<Student>>(`${API_ENDPOINTS.STUDENTS.ROOT}?page=${page}&limit=${limit}`);
 
 export const getStudent = (id: string) =>
   httpGet<StudentDetail>(API_ENDPOINTS.STUDENTS.BY_ID(id));
@@ -38,7 +40,8 @@ export const listStudentsBySemester = (semester: string) =>
 
 // ── Faculty ──────────────────────────────────────────────────────────────────
 
-export const listTeachers = () => httpGet<Teacher[]>(API_ENDPOINTS.TEACHERS.ROOT);
+export const listTeachers = (page = 1, limit = 20) => 
+  httpGet<Paginated<Teacher>>(`${API_ENDPOINTS.TEACHERS.ROOT}?page=${page}&limit=${limit}`);
 
 /**
  * Note this returns *less* than the list endpoint: `GET /teachers/:id` joins
@@ -75,7 +78,8 @@ export const deleteTeacher = (id: string) =>
 
 // ── Administrators ───────────────────────────────────────────────────────────
 
-export const listAdmins = () => httpGet<AdminRecord[]>(API_ENDPOINTS.ADMINS.ROOT);
+export const listAdmins = (page = 1, limit = 20) => 
+  httpGet<Paginated<AdminRecord>>(`${API_ENDPOINTS.ADMINS.ROOT}?page=${page}&limit=${limit}`);
 
 export const getAdmin = (id: string) =>
   httpGet<AdminRecord>(API_ENDPOINTS.ADMINS.BY_ID(id));

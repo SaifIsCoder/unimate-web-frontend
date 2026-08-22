@@ -1,5 +1,5 @@
 import API_ENDPOINTS from "@/config/api";
-import type { Role } from "@/types/academics";
+import type { Role, Paginated } from "@/types/academics";
 import { httpGet, httpPost } from "./http";
 
 /**
@@ -75,7 +75,8 @@ export type UserRow = {
   created_at: string;
 };
 
-export const listUsers = () => httpGet<UserRow[]>(API_ENDPOINTS.USERS.ROOT);
+export const listUsers = (page = 1, limit = 20) => 
+  httpGet<Paginated<UserRow>>(`${API_ENDPOINTS.USERS.ROOT}?page=${page}&limit=${limit}`);
 
 export type AdminProfile = {
   id: string;

@@ -34,3 +34,14 @@ export const httpPatch = async <T,>(url: string, body: unknown): Promise<T> =>
 
 export const httpDelete = async <T,>(url: string): Promise<T> =>
   unwrap<T>(await apiRequest(url, { method: "DELETE" }));
+
+export const fetchCount = async (url: string): Promise<number> => {
+  const result = await httpGet<any>(url + "?page=1&limit=1");
+  if (result && typeof result === "object" && "meta" in result) {
+    return result.meta.total ?? 0;
+  }
+  if (Array.isArray(result)) {
+    return result.length;
+  }
+  return 0;
+};
