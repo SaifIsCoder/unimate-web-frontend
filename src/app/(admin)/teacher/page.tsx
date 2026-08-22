@@ -6,6 +6,7 @@ import ComponentCard from "@/components/common/ComponentCard";
 import Badge from "@/components/ui/badge/Badge";
 import { errorMessage } from "@/components/admin/FeedbackBanner";
 import { useAuth } from "@/context/AuthContext";
+import TeacherAnalytics from "@/components/dashboard/TeacherAnalytics";
 import { getMyTimetable, listMyOfferings } from "@/services/teachingService";
 import {
   DAY_ORDER,
@@ -74,6 +75,8 @@ export default function TeacherHomePage() {
 
   return (
     <div className="space-y-6">
+      <TeacherAnalytics />
+      
       <ComponentCard
         title="Your classes"
         desc={user?.email ? `Signed in as ${user.email}` : undefined}

@@ -19,6 +19,7 @@ import type {
   AttendanceSession,
   AttendanceStat,
   Offering,
+  PageMeta,
 } from "@/types/academics";
 
 const offeringLabel = (offering: Offering) =>
@@ -30,6 +31,9 @@ export default function AttendanceReportPage() {
   const [offeringsError, setOfferingsError] = useState<string | null>(null);
 
   const [stats, setStats] = useState<AttendanceStat[]>([]);
+  const [meta, setMeta] = useState<PageMeta | undefined>();
+  const [page, setPage] = useState(1);
+  const [limit] = useState(20);
   const [sessions, setSessions] = useState<AttendanceSession[]>([]);
   const [loadedFor, setLoadedFor] = useState<string | null>(null);
   const [statsError, setStatsError] = useState<string | null>(null);
@@ -46,11 +50,11 @@ export default function AttendanceReportPage() {
 
     void (async () => {
       try {
-        const rows = await listOfferings();
+        const page = await listOfferings();
         if (!alive) return;
-        setOfferings(rows);
+        setOfferings(page.data);
         setOfferingsError(null);
-        if (rows.length > 0) setOfferingId((current) => current || rows[0].id);
+        if (page.data.length > 0) setOfferingId((current) => current || page.data[0].id);
       } catch (error) {
         if (alive) setOfferingsError(errorMessage(error, "Could not load offerings."));
       }
@@ -68,14 +72,17 @@ export default function AttendanceReportPage() {
 
     void (async () => {
       const [statsResult, sessionResult] = await Promise.allSettled([
-        getAttendanceStats(offeringId),
+        getAttendanceStats(offeringId, { page, limit }),
         listSessions(offeringId),
       ]);
 
       if (!alive) return;
 
       if (statsResult.status === "fulfilled") {
-        setStats(statsResult.value.data);
+        // @ts-expect-error - The backend returns { totalLectures, studentStats: { data, meta } }
+        setStats(statsResult.value.studentStats.data);
+        // @ts-expect-error
+        setMeta(statsResult.value.studentStats.meta);
         setStatsError(null);
       } else {
         setStats([]);
@@ -89,7 +96,7 @@ export default function AttendanceReportPage() {
     return () => {
       alive = false;
     };
-  }, [offeringId]);
+  }, [offeringId, page, limit]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -221,6 +228,7 @@ export default function AttendanceReportPage() {
                 // stops the previous offering's session detail lingering.
                 setSessionId("");
                 setRecords([]);
+                setPage(1);
                 setOfferingId(value);
               }}
             />
@@ -274,6 +282,8 @@ export default function AttendanceReportPage() {
                 loading={loading}
                 error={statsError}
                 emptyMessage="No attendance recorded for this offering yet."
+                pagination={meta}
+                onPageChange={setPage}
               />
             </ComponentCard>
 

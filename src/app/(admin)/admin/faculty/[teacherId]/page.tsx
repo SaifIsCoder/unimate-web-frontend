@@ -64,7 +64,7 @@ export default function TeacherDetailPage() {
       }
 
       // Only used to name the department — absence degrades to showing the id.
-      if (departmentsResult.status === "fulfilled") setDepartments(departmentsResult.value);
+      setDepartments(departmentsResult.status === "fulfilled" ? departmentsResult.value.data : []);
 
       setLoading(false);
       setOfferingsLoading(false);

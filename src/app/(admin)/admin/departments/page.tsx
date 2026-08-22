@@ -19,7 +19,7 @@ import {
   listDepartments as fetchDepartments,
   updateDepartment,
 } from "@/services/academicService";
-import type { Department } from "@/types/academics";
+import type { Department, PageMeta } from "@/types/academics";
 
 type DepartmentForm = {
   name: string;
@@ -31,6 +31,9 @@ const emptyForm = (): DepartmentForm => ({ name: "", code: "", description: "" }
 
 export default function DepartmentsPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [meta, setMeta] = useState<PageMeta | undefined>();
+  const [page, setPage] = useState(1);
+  const [limit] = useState(20);
   const [form, setForm] = useState<DepartmentForm>(emptyForm);
   /** null = creating; a number = editing that department (ids are integers). */
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -49,14 +52,15 @@ export default function DepartmentsPage() {
    */
   const reload = useCallback(() => {
     setLoading(true);
-    void fetchDepartments()
-      .then((rows) => {
-        setDepartments(rows);
+    void fetchDepartments(page, limit)
+      .then((response) => {
+        setDepartments(response.data);
+        setMeta(response.meta);
         setListError(null);
       })
       .catch((error) => setListError(errorMessage(error, "Could not load departments.")))
       .finally(() => setLoading(false));
-  }, []);
+  }, [page, limit]);
 
   // Initial load. The work happens inside an async closure so no setState runs
   // synchronously in the effect body, and `alive` stops a slow response from
@@ -65,10 +69,12 @@ export default function DepartmentsPage() {
     let alive = true;
 
     void (async () => {
+      setLoading(true);
       try {
-        const rows = await fetchDepartments();
+        const response = await fetchDepartments(page, limit);
         if (alive) {
-          setDepartments(rows);
+          setDepartments(response.data);
+          setMeta(response.meta);
           setListError(null);
         }
       } catch (error) {
@@ -81,7 +87,7 @@ export default function DepartmentsPage() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [page, limit]);
 
   const setField = <K extends keyof DepartmentForm>(key: K, value: DepartmentForm[K]) => {
     setForm((previous) => ({ ...previous, [key]: value }));
@@ -311,6 +317,8 @@ export default function DepartmentsPage() {
             loading={loading}
             error={listError}
             emptyMessage="No departments yet. Create one to start building the catalog."
+            pagination={meta}
+            onPageChange={setPage}
           />
         </ComponentCard>
       </div>

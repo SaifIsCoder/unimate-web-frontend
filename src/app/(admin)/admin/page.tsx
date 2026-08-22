@@ -3,6 +3,7 @@
 import Link from "next/link";
 import ComponentCard from "@/components/common/ComponentCard";
 import { useAuth } from "@/context/AuthContext";
+import AdminAnalytics from "@/components/dashboard/AdminAnalytics";
 
 type ModuleCard = {
   title: string;
@@ -11,6 +12,21 @@ type ModuleCard = {
 };
 
 const LIVE_MODULES: ModuleCard[] = [
+  {
+    title: "Students",
+    desc: "View and manage student records, batches, and roll numbers.",
+    href: "/admin/students",
+  },
+  {
+    title: "Faculty",
+    desc: "View and manage teacher records and employee IDs.",
+    href: "/admin/faculty",
+  },
+  {
+    title: "Administrators",
+    desc: "Manage admin profiles and department assignments.",
+    href: "/admin/administrators",
+  },
   {
     title: "User Provisioning",
     desc: "Create student, teacher, and admin accounts. One form, one transactional endpoint.",
@@ -41,14 +57,31 @@ const LIVE_MODULES: ModuleCard[] = [
     desc: "Publish campus events to the mobile app calendar.",
     href: "/admin/events",
   },
-];
-
-const PLANNED_MODULES: ModuleCard[] = [
-  { title: "Departments", desc: "Manage academic departments." },
-  { title: "Schedules", desc: "Manage class timetables and exceptions." },
-  { title: "Attendance", desc: "View attendance sessions and stats across any offering." },
-  { title: "Grades", desc: "View gradebooks and full student transcripts." },
-  { title: "Community", desc: "Moderate posts and comments within your department." },
+  {
+    title: "Departments",
+    desc: "Manage academic departments.",
+    href: "/admin/departments",
+  },
+  {
+    title: "Schedules",
+    desc: "Manage class timetables and exceptions.",
+    href: "/admin/timetable",
+  },
+  {
+    title: "Attendance",
+    desc: "View attendance sessions and stats across any offering.",
+    href: "/admin/attendance",
+  },
+  {
+    title: "Grades",
+    desc: "View gradebooks and full student transcripts.",
+    href: "/admin/transcripts",
+  },
+  {
+    title: "Community",
+    desc: "Moderate posts and comments within your department.",
+    href: "/admin/community",
+  }
 ];
 
 function ModuleGrid({ modules }: { modules: ModuleCard[] }) {
@@ -110,18 +143,13 @@ export default function AdminHomePage() {
         </p>
       </ComponentCard>
 
+      <AdminAnalytics />
+
       <div>
         <h3 className="mb-3 text-sm font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
           Available now
         </h3>
         <ModuleGrid modules={LIVE_MODULES} />
-      </div>
-
-      <div>
-        <h3 className="mb-3 text-sm font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
-          Planned
-        </h3>
-        <ModuleGrid modules={PLANNED_MODULES} />
       </div>
     </div>
   );

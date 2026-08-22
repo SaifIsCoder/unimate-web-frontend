@@ -64,6 +64,9 @@ export default function AnnouncementsPage() {
   const [profile, setProfile] = useState<AdminProfile | null>(null);
   const [offerings, setOfferings] = useState<Offering[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [meta, setMeta] = useState<any>(undefined);
+  const [page, setPage] = useState(1);
+  const [limit] = useState(20);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -76,15 +79,16 @@ export default function AnnouncementsPage() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const page = await listAnnouncements();
-      setAnnouncements(page.data);
+      const pageResult = await listAnnouncements({ page, limit });
+      setAnnouncements(pageResult.data);
+      setMeta(pageResult.meta);
       setListError(null);
     } catch (error) {
       setListError(errorMessage(error, "Could not load announcements."));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, limit]);
 
   // Async closure keeps setState off the synchronous effect path; `alive`
   // guards against a response landing after unmount.
@@ -96,16 +100,16 @@ export default function AnnouncementsPage() {
       // announcement list surfaces an error.
       const [departmentResult, offeringResult, profileResult, listResult] =
         await Promise.allSettled([
-          listDepartments(),
-          listOfferings(),
+          listDepartments(1, 100),
+          listOfferings(1, 100),
           getMyAdminProfile(),
-          listAnnouncements(),
+          listAnnouncements({ page, limit }),
         ]);
 
       if (!alive) return;
 
-      setDepartments(departmentResult.status === "fulfilled" ? departmentResult.value : []);
-      setOfferings(offeringResult.status === "fulfilled" ? offeringResult.value : []);
+      setDepartments(departmentResult.status === "fulfilled" ? departmentResult.value.data : []);
+      setOfferings(offeringResult.status === "fulfilled" ? offeringResult.value.data : []);
 
       // The server only accepts the admin's OWN department as a target, so the
       // picker is seeded from this rather than from the full department list.
@@ -120,6 +124,7 @@ export default function AnnouncementsPage() {
 
       if (listResult.status === "fulfilled") {
         setAnnouncements(listResult.value.data);
+        setMeta(listResult.value.meta);
         setListError(null);
       } else {
         setListError(errorMessage(listResult.reason, "Could not load announcements."));
@@ -131,7 +136,7 @@ export default function AnnouncementsPage() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [page, limit]);
 
   const semesters = useMemo(
     () => Array.from(new Set(offerings.map((offering) => offering.semester))).sort(),
@@ -593,6 +598,8 @@ export default function AnnouncementsPage() {
             loading={loading}
             error={listError}
             emptyMessage="Nothing has been broadcast yet."
+            pagination={meta}
+            onPageChange={setPage}
           />
         </ComponentCard>
       </div>

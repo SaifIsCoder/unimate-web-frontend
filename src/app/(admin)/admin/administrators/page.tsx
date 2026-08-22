@@ -15,7 +15,7 @@ import FeedbackBanner, {
 import DataTable, { type Column } from "@/components/admin/DataTable";
 import { useAuth } from "@/context/AuthContext";
 import { deleteAdmin, listAdmins, updateAdmin } from "@/services/directoryService";
-import type { AdminRecord } from "@/types/academics";
+import type { AdminRecord, PageMeta } from "@/types/academics";
 
 const ROLE_LABEL: Record<string, string> = {
   super_admin: "Super Admin",
@@ -26,6 +26,9 @@ export default function AdministratorsPage() {
   const { user } = useAuth();
 
   const [admins, setAdmins] = useState<AdminRecord[]>([]);
+  const [meta, setMeta] = useState<PageMeta | undefined>();
+  const [page, setPage] = useState(1);
+  const [limit] = useState(20);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
 
@@ -41,14 +44,15 @@ export default function AdministratorsPage() {
   /** Re-fetch after a mutation; runs from an event handler, so sync setState is fine. */
   const refresh = useCallback(() => {
     setLoading(true);
-    void listAdmins()
-      .then((rows) => {
-        setAdmins(rows);
+    void listAdmins(page, limit)
+      .then((response) => {
+        setAdmins(response.data);
+        setMeta(response.meta);
         setListError(null);
       })
       .catch((error) => setListError(errorMessage(error, "Could not load administrators.")))
       .finally(() => setLoading(false));
-  }, []);
+  }, [page, limit]);
 
   // Async closure so no setState runs synchronously in the effect body, with
   // `alive` guarding against a response landing after unmount.
@@ -56,10 +60,12 @@ export default function AdministratorsPage() {
     let alive = true;
 
     void (async () => {
+      setLoading(true);
       try {
-        const rows = await listAdmins();
+        const response = await listAdmins(page, limit);
         if (alive) {
-          setAdmins(rows);
+          setAdmins(response.data);
+          setMeta(response.meta);
           setListError(null);
         }
       } catch (error) {
@@ -72,7 +78,7 @@ export default function AdministratorsPage() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [page, limit]);
 
   const startEdit = (admin: AdminRecord) => {
     setEditing(admin);
@@ -286,6 +292,8 @@ export default function AdministratorsPage() {
             loading={loading}
             error={listError}
             emptyMessage="No administrator profiles found."
+            pagination={meta}
+            onPageChange={setPage}
           />
         </ComponentCard>
       </div>

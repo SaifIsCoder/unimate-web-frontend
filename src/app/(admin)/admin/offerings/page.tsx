@@ -29,6 +29,7 @@ import {
   type Course,
   type Offering,
   type Teacher,
+  type PageMeta,
 } from "@/types/academics";
 
 type WeightForm = Record<AssessmentWeightField, string>;
@@ -64,6 +65,9 @@ export default function OfferingsPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [offerings, setOfferings] = useState<Offering[]>([]);
+  const [meta, setMeta] = useState<PageMeta | undefined>();
+  const [page, setPage] = useState(1);
+  const [limit] = useState(20);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -77,14 +81,16 @@ export default function OfferingsPage() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      setOfferings(await listOfferings());
+      const response = await listOfferings(page, limit);
+      setOfferings(response.data);
+      setMeta(response.meta);
       setListError(null);
     } catch (error) {
       setListError(errorMessage(error, "Could not load offerings."));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, limit]);
 
   // Async closure keeps setState off the synchronous effect path; `alive`
   // guards against a response landing after unmount.
@@ -96,16 +102,17 @@ export default function OfferingsPage() {
       const [courseResult, teacherResult, offeringResult] = await Promise.allSettled([
         listCourses(),
         listTeachers(),
-        listOfferings(),
+        listOfferings(page, limit),
       ]);
 
       if (!alive) return;
 
-      setCourses(courseResult.status === "fulfilled" ? courseResult.value : []);
-      setTeachers(teacherResult.status === "fulfilled" ? teacherResult.value : []);
+      setCourses(courseResult.status === "fulfilled" ? courseResult.value.data : []);
+      setTeachers(teacherResult.status === "fulfilled" ? teacherResult.value.data : []);
 
       if (offeringResult.status === "fulfilled") {
-        setOfferings(offeringResult.value);
+        setOfferings(offeringResult.value.data);
+        setMeta(offeringResult.value.meta);
         setListError(null);
       } else {
         setListError(errorMessage(offeringResult.reason, "Could not load offerings."));
@@ -117,7 +124,7 @@ export default function OfferingsPage() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [page, limit]);
 
   const selectedCourse = useMemo(
     () => courses.find((course) => course.id === form.course_id) ?? null,
@@ -457,6 +464,8 @@ export default function OfferingsPage() {
             loading={loading}
             error={listError}
             emptyMessage="No offerings yet."
+            pagination={meta}
+            onPageChange={setPage}
           />
         </ComponentCard>
       </div>

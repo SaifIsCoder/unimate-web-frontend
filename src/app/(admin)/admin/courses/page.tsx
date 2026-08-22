@@ -19,7 +19,7 @@ import {
   listCourses,
   listDepartments,
 } from "@/services/academicService";
-import type { Course, Department } from "@/types/academics";
+import type { Course, Department, PageMeta } from "@/types/academics";
 
 type CourseForm = {
   code: string;
@@ -41,6 +41,9 @@ export default function CoursesPage() {
   const [form, setForm] = useState<CourseForm>(emptyForm);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [meta, setMeta] = useState<PageMeta | undefined>();
+  const [page, setPage] = useState(1);
+  const [limit] = useState(20);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -50,14 +53,16 @@ export default function CoursesPage() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      setCourses(await listCourses());
+      const response = await listCourses(page, limit);
+      setCourses(response.data);
+      setMeta(response.meta);
       setListError(null);
     } catch (error) {
       setListError(errorMessage(error, "Could not load courses."));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, limit]);
 
   // Async closure keeps setState off the synchronous effect path
   // (react-hooks/set-state-in-effect), and `alive` stops a slow response
@@ -70,15 +75,16 @@ export default function CoursesPage() {
       // list rather than blocking the course table.
       const [departmentResult, courseResult] = await Promise.allSettled([
         listDepartments(),
-        listCourses(),
+        listCourses(page, limit),
       ]);
 
       if (!alive) return;
 
-      setDepartments(departmentResult.status === "fulfilled" ? departmentResult.value : []);
+      setDepartments(departmentResult.status === "fulfilled" ? departmentResult.value.data : []);
 
       if (courseResult.status === "fulfilled") {
-        setCourses(courseResult.value);
+        setCourses(courseResult.value.data);
+        setMeta(courseResult.value.meta);
         setListError(null);
       } else {
         setListError(errorMessage(courseResult.reason, "Could not load courses."));
@@ -90,7 +96,7 @@ export default function CoursesPage() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [page, limit]);
 
   const setField = <K extends keyof CourseForm>(key: K, value: CourseForm[K]) => {
     setForm((previous) => ({ ...previous, [key]: value }));
@@ -249,6 +255,8 @@ export default function CoursesPage() {
             loading={loading}
             error={listError}
             emptyMessage="No courses yet."
+            pagination={meta}
+            onPageChange={setPage}
           />
         </ComponentCard>
       </div>

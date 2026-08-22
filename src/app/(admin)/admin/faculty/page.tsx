@@ -14,10 +14,13 @@ import FeedbackBanner, {
 } from "@/components/admin/FeedbackBanner";
 import DataTable, { type Column } from "@/components/admin/DataTable";
 import { deleteTeacher, listTeachers, updateTeacher } from "@/services/directoryService";
-import type { Teacher } from "@/types/academics";
+import type { Teacher, PageMeta } from "@/types/academics";
 
 export default function FacultyRosterPage() {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
+  const [meta, setMeta] = useState<PageMeta | undefined>();
+  const [page, setPage] = useState(1);
+  const [limit] = useState(20);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -34,16 +37,17 @@ export default function FacultyRosterPage() {
   /** Re-fetch after a mutation; runs from an event handler, so sync setState is fine. */
   const refresh = useCallback(() => {
     setLoading(true);
-    void listTeachers()
-      .then((rows) => {
-        setTeachers(rows);
+    void listTeachers(page, limit)
+      .then((response) => {
+        setTeachers(response.data);
+        setMeta(response.meta);
         setListError(null);
       })
       .catch((error) =>
         setListError(errorMessage(error, "Could not load the faculty roster.")),
       )
       .finally(() => setLoading(false));
-  }, []);
+  }, [page, limit]);
 
   // Async closure so no setState runs synchronously in the effect body, with
   // `alive` guarding against a response landing after unmount.
@@ -51,10 +55,12 @@ export default function FacultyRosterPage() {
     let alive = true;
 
     void (async () => {
+      setLoading(true);
       try {
-        const rows = await listTeachers();
+        const response = await listTeachers(page, limit);
         if (alive) {
-          setTeachers(rows);
+          setTeachers(response.data);
+          setMeta(response.meta);
           setListError(null);
         }
       } catch (error) {
@@ -67,7 +73,7 @@ export default function FacultyRosterPage() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [page, limit]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -278,6 +284,8 @@ export default function FacultyRosterPage() {
             loading={loading}
             error={listError}
             emptyMessage={query ? "No faculty match that search." : "No faculty yet."}
+            pagination={meta}
+            onPageChange={setPage}
           />
         </ComponentCard>
       </div>

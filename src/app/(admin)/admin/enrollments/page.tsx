@@ -19,7 +19,7 @@ import {
   removeEnrollment,
   updateEnrollment,
 } from "@/services/enrollmentService";
-import type { Enrollment, Offering, Student } from "@/types/academics";
+import type { Enrollment, Offering, Student, PageMeta } from "@/types/academics";
 
 export default function EnrollmentsPage() {
   const [offerings, setOfferings] = useState<Offering[]>([]);
@@ -27,6 +27,9 @@ export default function EnrollmentsPage() {
   const [offeringId, setOfferingId] = useState("");
   const [studentId, setStudentId] = useState("");
   const [roster, setRoster] = useState<Enrollment[]>([]);
+  const [meta, setMeta] = useState<PageMeta | undefined>();
+  const [page, setPage] = useState(1);
+  const [limit] = useState(20);
   const [total, setTotal] = useState(0);
   const [loadingRoster, setLoadingRoster] = useState(false);
   const [rosterError, setRosterError] = useState<string | null>(null);
@@ -35,11 +38,11 @@ export default function EnrollmentsPage() {
   const [feedback, setFeedback] = useState<Feedback>(null);
 
   useEffect(() => {
-    listOfferings()
-      .then(setOfferings)
+    listOfferings(1, 100)
+      .then((page) => setOfferings(page.data))
       .catch(() => setOfferings([]));
-    listStudents()
-      .then(setStudents)
+    listStudents(1, 100)
+      .then((page) => setStudents(page.data))
       .catch(() => setStudents([]));
   }, []);
 
@@ -52,14 +55,16 @@ export default function EnrollmentsPage() {
     if (!id) {
       setRoster([]);
       setTotal(0);
+      setMeta(undefined);
       return;
     }
 
     setLoadingRoster(true);
     try {
-      const page = await listEnrollmentsByOffering(id);
-      setRoster(page.data);
-      setTotal(page.meta.total);
+      const response = await listEnrollmentsByOffering(id, { page, limit });
+      setRoster(response.data);
+      setMeta(response.meta);
+      setTotal(response.meta.total);
       setRosterError(null);
     } catch (error) {
       setRoster([]);
@@ -67,7 +72,7 @@ export default function EnrollmentsPage() {
     } finally {
       setLoadingRoster(false);
     }
-  }, []);
+  }, [page, limit]);
 
   // Async closure keeps setState off the synchronous effect path; `alive`
   // guards against a stale roster overwriting a newer one when the admin
@@ -78,11 +83,13 @@ export default function EnrollmentsPage() {
     let alive = true;
 
     void (async () => {
+      setLoadingRoster(true);
       try {
-        const page = await listEnrollmentsByOffering(offeringId);
+        const response = await listEnrollmentsByOffering(offeringId, { page, limit });
         if (!alive) return;
-        setRoster(page.data);
-        setTotal(page.meta.total);
+        setRoster(response.data);
+        setMeta(response.meta);
+        setTotal(response.meta.total);
         setRosterError(null);
       } catch (error) {
         if (alive) {
@@ -97,7 +104,7 @@ export default function EnrollmentsPage() {
     return () => {
       alive = false;
     };
-  }, [offeringId]);
+  }, [offeringId, page, limit]);
 
   const activeCount = useMemo(
     () => roster.filter((row) => row.status === "enrolled").length,
@@ -265,6 +272,7 @@ export default function EnrollmentsPage() {
                 onChange={(value) => {
                   setOfferingId(value);
                   setStudentId("");
+                  setPage(1);
                   setFeedback(null);
                 }}
               />
@@ -327,6 +335,8 @@ export default function EnrollmentsPage() {
             emptyMessage={
               offeringId ? "No students enrolled yet." : "Select an offering to view its roster."
             }
+            pagination={meta}
+            onPageChange={setPage}
           />
         </ComponentCard>
       </div>

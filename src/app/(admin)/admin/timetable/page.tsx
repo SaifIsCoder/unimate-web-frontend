@@ -138,11 +138,11 @@ export default function MasterTimetablePage() {
 
     void (async () => {
       try {
-        const rows = await listOfferings();
+        const page = await listOfferings();
         if (!alive) return;
-        setOfferings(rows);
+        setOfferings(page.data);
         setOfferingsError(null);
-        if (rows.length > 0) setOfferingId((current) => current || rows[0].id);
+        if (page.data.length > 0) setOfferingId((current) => current || page.data[0].id);
       } catch (error) {
         if (alive) setOfferingsError(errorMessage(error, "Could not load offerings."));
       }

@@ -48,6 +48,9 @@ export default function EventsPage() {
   const [form, setForm] = useState<EventForm>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [events, setEvents] = useState<CampusEvent[]>([]);
+  const [meta, setMeta] = useState<any>(undefined);
+  const [page, setPage] = useState(1);
+  const [limit] = useState(20);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -58,15 +61,16 @@ export default function EventsPage() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const page = await listEvents();
-      setEvents(page.data);
+      const pageResult = await listEvents({ page, limit });
+      setEvents(pageResult.data);
+      setMeta(pageResult.meta);
       setListError(null);
     } catch (error) {
       setListError(errorMessage(error, "Could not load events."));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [page, limit]);
 
   // Async closure keeps setState off the synchronous effect path; `alive`
   // guards against a response landing after unmount.
@@ -75,9 +79,10 @@ export default function EventsPage() {
 
     void (async () => {
       try {
-        const page = await listEvents();
+        const pageResult = await listEvents({ page, limit });
         if (alive) {
-          setEvents(page.data);
+          setEvents(pageResult.data);
+          setMeta(pageResult.meta);
           setListError(null);
         }
       } catch (error) {
@@ -90,7 +95,7 @@ export default function EventsPage() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [page, limit]);
 
   const setField = <K extends keyof EventForm>(key: K, value: EventForm[K]) => {
     setForm((previous) => ({ ...previous, [key]: value }));
@@ -262,6 +267,8 @@ export default function EventsPage() {
                 value={form.title}
                 error={Boolean(errors.title)}
                 onChange={(e) => setField("title", e.target.value)}
+                maxLength={160}
+                required
               />
             </FormRow>
 
@@ -281,6 +288,7 @@ export default function EventsPage() {
                 placeholder="Main Auditorium"
                 value={form.location}
                 onChange={(e) => setField("location", e.target.value)}
+                maxLength={160}
               />
             </FormRow>
           </div>
@@ -291,6 +299,7 @@ export default function EventsPage() {
               placeholder="What is this event about?"
               value={form.description}
               onChange={(value) => setField("description", value)}
+              maxLength={2000}
             />
           </FormRow>
 
@@ -320,6 +329,8 @@ export default function EventsPage() {
             loading={loading}
             error={listError}
             emptyMessage="No events scheduled yet."
+            pagination={meta}
+            onPageChange={setPage}
           />
         </ComponentCard>
       </div>

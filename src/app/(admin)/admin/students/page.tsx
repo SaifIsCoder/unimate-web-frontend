@@ -14,7 +14,7 @@ import FeedbackBanner, {
 } from "@/components/admin/FeedbackBanner";
 import DataTable, { type Column } from "@/components/admin/DataTable";
 import { listStudents, listStudentsBySemester } from "@/services/directoryService";
-import type { SemesterStudent, Student } from "@/types/academics";
+import type { SemesterStudent, Student, PageMeta } from "@/types/academics";
 
 type Mode = "all" | "semester";
 
@@ -22,6 +22,9 @@ export default function StudentDirectoryPage() {
   const [mode, setMode] = useState<Mode>("all");
 
   const [students, setStudents] = useState<Student[]>([]);
+  const [meta, setMeta] = useState<PageMeta | undefined>();
+  const [page, setPage] = useState(1);
+  const [limit] = useState(20);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -38,10 +41,12 @@ export default function StudentDirectoryPage() {
     let alive = true;
 
     void (async () => {
+      setLoading(true);
       try {
-        const rows = await listStudents();
+        const response = await listStudents(page, limit);
         if (alive) {
-          setStudents(rows);
+          setStudents(response.data);
+          setMeta(response.meta);
           setListError(null);
         }
       } catch (error) {
@@ -54,7 +59,7 @@ export default function StudentDirectoryPage() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [page, limit]);
 
   /**
    * Client-side filter. `GET /students` is unpaginated and returns the whole
@@ -216,6 +221,8 @@ export default function StudentDirectoryPage() {
               emptyMessage={
                 query ? "No students match that search." : "No students yet."
               }
+              pagination={meta}
+              onPageChange={setPage}
             />
           </ComponentCard>
         ) : (

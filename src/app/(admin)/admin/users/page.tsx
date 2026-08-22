@@ -23,7 +23,7 @@ import {
   type CreateUserForm,
   type UserRow,
 } from "@/services/userService";
-import type { Department, Role } from "@/types/academics";
+import type { Department, Role, PageMeta } from "@/types/academics";
 
 const ROLE_LABELS: Record<Role, string> = {
   student: "Student",
@@ -44,6 +44,9 @@ export default function UserProvisioningPage() {
   const [form, setForm] = useState<CreateUserForm>(emptyCreateUserForm);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [meta, setMeta] = useState<PageMeta | undefined>();
+  const [page, setPage] = useState(1);
+  const [limit] = useState(20);
   const [listError, setListError] = useState<string | null>(null);
   const [loadingList, setLoadingList] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -55,14 +58,16 @@ export default function UserProvisioningPage() {
   const refreshUsers = useCallback(async () => {
     setLoadingList(true);
     try {
-      setUsers(await listUsers());
+      const response = await listUsers(page, limit);
+      setUsers(response.data);
+      setMeta(response.meta);
       setListError(null);
     } catch (error) {
       setListError(errorMessage(error, "Could not load accounts."));
     } finally {
       setLoadingList(false);
     }
-  }, []);
+  }, [page, limit]);
 
   // Async closure keeps setState off the synchronous effect path; `alive`
   // guards against a response landing after unmount.
@@ -74,15 +79,16 @@ export default function UserProvisioningPage() {
       // degradation, a missing user table is not.
       const [departmentResult, userResult] = await Promise.allSettled([
         listDepartments(),
-        listUsers(),
+        listUsers(page, limit),
       ]);
 
       if (!alive) return;
 
-      setDepartments(departmentResult.status === "fulfilled" ? departmentResult.value : []);
+      setDepartments(departmentResult.status === "fulfilled" ? departmentResult.value.data : []);
 
       if (userResult.status === "fulfilled") {
-        setUsers(userResult.value);
+        setUsers(userResult.value.data);
+        setMeta(userResult.value.meta);
         setListError(null);
       } else {
         setListError(errorMessage(userResult.reason, "Could not load accounts."));
@@ -94,7 +100,7 @@ export default function UserProvisioningPage() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [page, limit]);
 
   const setField = <K extends keyof CreateUserForm>(key: K, value: CreateUserForm[K]) => {
     setForm((previous) => ({ ...previous, [key]: value }));
@@ -314,6 +320,8 @@ export default function UserProvisioningPage() {
             loading={loadingList}
             error={listError}
             emptyMessage="No accounts yet."
+            pagination={meta}
+            onPageChange={setPage}
           />
         </ComponentCard>
       </div>

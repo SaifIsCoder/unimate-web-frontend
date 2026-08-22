@@ -32,9 +32,9 @@ export default function TranscriptsPage() {
 
     void (async () => {
       try {
-        const rows = await listStudents();
+        const page = await listStudents(1, 100);
         if (!alive) return;
-        setStudents(rows);
+        setStudents(page.data);
         setStudentsError(null);
       } catch (error) {
         if (alive) setStudentsError(errorMessage(error, "Could not load students."));
