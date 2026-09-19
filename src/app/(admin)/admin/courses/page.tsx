@@ -19,6 +19,7 @@ import {
   listCourses,
   listDepartments,
 } from "@/services/academicService";
+import { useAuth } from "@/context/AuthContext";
 import type { Course, Department, PageMeta } from "@/types/academics";
 
 type CourseForm = {
@@ -38,6 +39,9 @@ const emptyForm = (): CourseForm => ({
 });
 
 export default function CoursesPage() {
+  const { can } = useAuth();
+  const isSuperAdmin = can(["super_admin"]);
+
   const [form, setForm] = useState<CourseForm>(emptyForm);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -80,7 +84,16 @@ export default function CoursesPage() {
 
       if (!alive) return;
 
-      setDepartments(departmentResult.status === "fulfilled" ? departmentResult.value.data : []);
+      if (departmentResult.status === "fulfilled") {
+        let depts = departmentResult.value.data;
+        setDepartments(depts);
+
+        if (!isSuperAdmin && depts.length > 0) {
+          setForm((prev) => ({ ...prev, department_id: depts[0].id }));
+        }
+      } else {
+        setDepartments([]);
+      }
 
       if (courseResult.status === "fulfilled") {
         setCourses(courseResult.value.data);
@@ -96,7 +109,7 @@ export default function CoursesPage() {
     return () => {
       alive = false;
     };
-  }, [page, limit]);
+  }, [page, limit, isSuperAdmin]);
 
   const setField = <K extends keyof CourseForm>(key: K, value: CourseForm[K]) => {
     setForm((previous) => ({ ...previous, [key]: value }));
@@ -218,6 +231,7 @@ export default function CoursesPage() {
             <FormRow label="Department" htmlFor="course_department" required error={errors.department_id}>
               <Select
                 id="course_department"
+                disabled={!isSuperAdmin}
                 value={form.department_id === "" ? "" : String(form.department_id)}
                 placeholder="Select a department"
                 options={departments.map((department) => ({
