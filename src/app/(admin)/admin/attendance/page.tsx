@@ -79,10 +79,10 @@ export default function AttendanceReportPage() {
       if (!alive) return;
 
       if (statsResult.status === "fulfilled") {
-        // @ts-expect-error - The backend returns { totalLectures, studentStats: { data, meta } }
-        setStats(statsResult.value.studentStats.data);
+        // @ts-expect-error - The backend returns { data, meta } directly
+        setStats(statsResult.value.data);
         // @ts-expect-error
-        setMeta(statsResult.value.studentStats.meta);
+        setMeta(statsResult.value.meta);
         setStatsError(null);
       } else {
         setStats([]);
