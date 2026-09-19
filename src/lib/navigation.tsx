@@ -78,7 +78,7 @@ const SECTIONS: NavSection[] = [
         icon: <BoxCubeIcon />,
         roles: ADMIN,
         subItems: [
-          { name: "Departments", path: "/admin/departments", roles: ADMIN },
+          { name: "Departments", path: "/admin/departments", roles: SUPER_ADMIN },
           { name: "Courses", path: "/admin/courses", roles: ADMIN },
           { name: "Offerings", path: "/admin/offerings", roles: ADMIN },
         ],

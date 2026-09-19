@@ -20,6 +20,7 @@ import {
   updateDepartment,
 } from "@/services/academicService";
 import type { Department, PageMeta } from "@/types/academics";
+import { useAuth } from "@/context/AuthContext";
 
 type DepartmentForm = {
   name: string;
@@ -30,6 +31,9 @@ type DepartmentForm = {
 const emptyForm = (): DepartmentForm => ({ name: "", code: "", description: "" });
 
 export default function DepartmentsPage() {
+  const { can } = useAuth();
+  const isSuperAdmin = can(["super_admin"]);
+
   const [departments, setDepartments] = useState<Department[]>([]);
   const [meta, setMeta] = useState<PageMeta | undefined>();
   const [page, setPage] = useState(1);
@@ -210,29 +214,33 @@ export default function DepartmentsPage() {
       render: (row) =>
         row.description || <span className="text-gray-400 dark:text-gray-500">—</span>,
     },
-    {
-      key: "actions",
-      header: "Actions",
-      className: "text-right",
-      render: (row) => (
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={() => startEdit(row)}
-            className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
-          >
-            Edit
-          </button>
-          <button
-            type="button"
-            onClick={() => setPendingDelete(row)}
-            className="rounded-lg border border-error-300 px-3 py-1.5 text-xs font-medium text-error-600 transition hover:bg-error-50 dark:border-error-800 dark:text-error-400 dark:hover:bg-error-500/10"
-          >
-            Delete
-          </button>
-        </div>
-      ),
-    },
+    ...(isSuperAdmin
+      ? [
+          {
+            key: "actions",
+            header: "Actions",
+            className: "text-right",
+            render: (row: Department) => (
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => startEdit(row)}
+                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPendingDelete(row)}
+                  className="rounded-lg border border-error-300 px-3 py-1.5 text-xs font-medium text-error-600 transition hover:bg-error-50 dark:border-error-800 dark:text-error-400 dark:hover:bg-error-500/10"
+                >
+                  Delete
+                </button>
+              </div>
+            ),
+          } as Column<Department>,
+        ]
+      : []),
   ];
 
   const isEditing = editingId !== null;
@@ -242,11 +250,12 @@ export default function DepartmentsPage() {
       <PageBreadcrumb pageTitle="Departments" />
 
       <div className="space-y-6">
-        <ComponentCard
-          title={isEditing ? "Edit department" : "Add a department"}
-          desc="Departments scope courses, people, announcements and community moderation."
-        >
-          <FeedbackBanner feedback={feedback} />
+        {isSuperAdmin && (
+          <ComponentCard
+            title={isEditing ? "Edit department" : "Add a department"}
+            desc="Departments scope courses, people, announcements and community moderation."
+          >
+            <FeedbackBanner feedback={feedback} />
 
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
             <FormRow label="Name" htmlFor="dept_name" required error={errors.name}>
@@ -308,6 +317,7 @@ export default function DepartmentsPage() {
             </Button>
           </div>
         </ComponentCard>
+        )}
 
         <ComponentCard title="Departments" desc={`${departments.length} department(s)`}>
           <DataTable
